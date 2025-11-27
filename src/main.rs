@@ -2,7 +2,18 @@ use anagram_design::{format_tree, minimal_trees_limited};
 
 fn zodiac_words() -> Vec<String> {
     vec![
-        "aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
+        "aries",
+        "taurus",
+        "gemini",
+        "cancer",
+        "leo",
+        "virgo",
+        "libra",
+        "scorpio",
+        "sagittarius",
+        "capricorn",
+        "aquarius",
+        "pisces",
     ]
     .into_iter()
     .map(|s| s.to_string())
@@ -34,7 +45,10 @@ fn print_solutions(allow_repeat: bool, prioritize_soft_no: bool) {
     if result.trees.len() > preview {
         let more = result.trees.len() - preview;
         if result.exhausted {
-            println!("... {} stored (limit reached, more optimal trees exist)", more);
+            println!(
+                "... {} stored (limit reached, more optimal trees exist)",
+                more
+            );
         } else {
             println!("... {} more optimal tree(s) omitted", more);
         }

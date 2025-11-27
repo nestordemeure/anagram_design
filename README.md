@@ -43,6 +43,27 @@ cargo test
 
 Includes regression tests and a Zodiac cost check for both settings.
 
+## Web demo (WASM)
+
+Build and view the browser UI (uses Pico CSS and the wasm-bindgen JS shim):
+
+```bash
+rustup target add wasm32-unknown-unknown               # once
+cargo build --lib --target wasm32-unknown-unknown --release
+wasm-bindgen --target web --out-dir web/pkg --no-typescript target/wasm32-unknown-unknown/release/anagram_design.wasm
+python3 -m http.server 8000 --directory web             # then open http://localhost:8000
+```
+
+Use `wasm-bindgen-cli 0.2.95` to match the pinned crate version (or update both in lockstep).
+
+UI features:
+- Word list textarea (defaults to the Zodiac signs)
+- Toggle `Allow repeat` and `Prioritize soft-no`
+- Limit the number of stored optimal trees (0 = unlimited)
+- ASCII render of each top tree plus cost summary
+
+To publish on GitHub Pages, point Pages at the `web/` directory so the bundled `pkg/` assets are served alongside `index.html`.
+
 ## TODO
 
 * soft no:

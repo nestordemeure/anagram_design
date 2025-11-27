@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Annagram Generator</title>
+  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css">
+  <style>
+    :root {
+      --pre-bg: #111827;
+      --pre-fg: #e5e7eb;
+    }
+    pre {
+      background: var(--pre-bg);
+      color: var(--pre-fg);
+      padding: 1rem;
+      white-space: pre;
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      border-radius: var(--pico-border-radius);
+    }
+    #status {
+      min-height: 1.25rem;
+    }
+    .trees > article {
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <hgroup>
+        <h1>Annagram Generator</h1>
+        <p>Dr. Dee's subtleties-aware optimal annagram generator.</p>
+      </hgroup>
+    </header>
+
+    <section>
+      <form id="solver-form">
+        <div class="grid">
+          <label>
+            <input type="checkbox" id="allow-repeat" name="allow-repeat" checked>
+            Use the “repeat in your mind” ploy
+          </label>
+          <label>
+            <input type="checkbox" id="prioritize-soft" name="prioritize-soft" checked>
+            Prioritize explainable “no” over minimizing total “no”
+          </label>
+        </div>
+
+        <div class="grid">
+          <label for="limit">
+            Maximum number of results to display (0 = no cap)
+            <input type="number" id="limit" name="limit" value="5" min="0" max="20" inputmode="numeric">
+          </label>
+          <div class="grid">
+            <button type="submit">Generate</button>
+          </div>
+        </div>
+
+        <label for="words">
+          Word list (one per line or comma separated)
+          <textarea id="words" name="words" rows="8" placeholder="Aries&#10;Taurus&#10;Gemini&#10;Cancer&#10;Leo&#10;Virgo&#10;Libra&#10;Scorpio&#10;Sagittarius&#10;Capricorn&#10;Aquarius&#10;Pisces"></textarea>
+        </label>
+      </form>
+    </section>
+
+    <section>
+      <p id="status" aria-live="polite"></p>
+      <div id="summary"></div>
+      <div id="trees" class="trees"></div>
+    </section>
+  </main>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
