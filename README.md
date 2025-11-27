@@ -18,10 +18,10 @@ Nodes are yes/no questions that partition the word set:
 - **Leaves / Repeat** (only when exactly two words): cost `(0,0,0,0,0)`.
 
 ### Cost (lexicographically minimized)
-1. `nos` — max No edges on any root→leaf path (component-wise max across branches).
-2. `hard_nos` — max hard No edges on any path.
-3. `sum_nos` — weighted sum of No edges (words in the No branch each add 1).
-4. `sum_hard_nos` — weighted sum of hard No edges.
+1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches).
+2. `nos` — max No edges on any path.
+3. `sum_hard_nos` — weighted sum of hard No edges.
+4. `sum_nos` — weighted sum of No edges (words in the No branch each add 1).
 5. `depth` — max tree depth.
 
 Only the first 5 optimal trees are stored/displayed; truncation is noted but optimality still holds.
@@ -43,8 +43,6 @@ cargo test
 Includes regression tests and a Zodiac cost check for both settings.
 
 ## TODO
-
-* should hard no be the first criteria in our cost function?
 
 * soft no:
   * introduce sounds and not just letters?

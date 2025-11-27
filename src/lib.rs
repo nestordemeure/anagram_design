@@ -3,14 +3,14 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cost {
-    /// Number of No-edges on the heaviest path (primary objective).
-    pub nos: u32,
-    /// Number of hard No-edges on the heaviest path (secondary objective).
+    /// Number of hard No-edges on the heaviest path (primary objective).
     pub hard_nos: u32,
-    /// Sum of No-edges weighted by word count (tertiary objective).
-    pub sum_nos: u32,
-    /// Sum of hard No-edges weighted by word count (quaternary objective).
+    /// Number of No-edges on the heaviest path (secondary objective).
+    pub nos: u32,
+    /// Sum of hard No-edges weighted by word count (tertiary objective).
     pub sum_hard_nos: u32,
+    /// Sum of No-edges weighted by word count (quaternary objective).
+    pub sum_nos: u32,
     /// Total depth (edges) on that path (quinary tie-breaker).
     pub depth: u32,
     /// Number of words in this subtree.
@@ -19,19 +19,12 @@ pub struct Cost {
 
 impl Ord for Cost {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.nos.cmp(&other.nos) {
-            Ordering::Equal => match self.hard_nos.cmp(&other.hard_nos) {
-                Ordering::Equal => match self.sum_nos.cmp(&other.sum_nos) {
-                    Ordering::Equal => match self.sum_hard_nos.cmp(&other.sum_hard_nos) {
-                        Ordering::Equal => self.depth.cmp(&other.depth),
-                        ord => ord,
-                    },
-                    ord => ord,
-                },
-                ord => ord,
-            },
-            ord => ord,
-        }
+        self.hard_nos
+            .cmp(&other.hard_nos)
+            .then_with(|| self.nos.cmp(&other.nos))
+            .then_with(|| self.sum_hard_nos.cmp(&other.sum_hard_nos))
+            .then_with(|| self.sum_nos.cmp(&other.sum_nos))
+            .then_with(|| self.depth.cmp(&other.depth))
     }
 }
 
@@ -331,8 +324,7 @@ fn solve(
         let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, yes_known, limit, memo);
         let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, known_letters, limit, memo);
 
-        // Adding this split increases depth on both sides; "nos" and "hard_nos" increment along No.
-        // cost = (0,0,1) + max(yes, no + (1,1,0))
+        // Adding this split increases depth on both sides; the No branch increments both hard_nos and nos.
         let yes_cost = yes_sol.cost;
         let no_cost = Cost {
             nos: no_sol.cost.nos + 1,
@@ -458,8 +450,7 @@ fn solve(
         let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, yes_known, limit, memo);
         let no_sol = solve(no, ctx, allow_repeat, child_forbidden, no_known, limit, memo);
 
-        // Soft split: nos increments, but hard_nos does not
-        // cost = (0,0,1) + max(yes, no + (1,0,0))
+        // Soft split: No branch increments nos but leaves hard_nos unchanged.
         let yes_cost = yes_sol.cost;
         let no_cost = Cost {
             nos: no_sol.cost.nos + 1,
