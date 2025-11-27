@@ -99,6 +99,8 @@ struct Key {
     allow_repeat: bool,
     /// Bitmask of forbidden letters (bit for each letter a-z used in ancestor soft nos)
     forbidden_letters: u32,
+    /// Bitmask of known letters (letters we know exist in all words in this branch)
+    known_letters: u32,
 }
 
 /// Defines a soft no pair: (test_letter, requirement_letter)
@@ -163,6 +165,10 @@ const SOFT_NO_PAIRS: &[SoftNoPair] = &[
     // I/T pair - visually similar
     SoftNoPair { test_letter: 'i', requirement_letter: 't' },
     SoftNoPair { test_letter: 't', requirement_letter: 'i' },
+
+    // R/E pair
+    SoftNoPair { test_letter: 'r', requirement_letter: 'e' },
+    SoftNoPair { test_letter: 'e', requirement_letter: 'r' },
 ];
 
 fn mask_count(mask: u16) -> u32 {
@@ -258,10 +264,11 @@ fn solve(
     ctx: &Context<'_>,
     allow_repeat: bool,
     forbidden_letters: u32,
+    known_letters: u32,
     limit: Option<usize>,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
-    let key = Key { mask, allow_repeat, forbidden_letters };
+    let key = Key { mask, allow_repeat, forbidden_letters, known_letters };
     if let Some(hit) = memo.get(&key) {
         return hit.clone();
     }
@@ -300,8 +307,11 @@ fn solve(
             continue; // does not partition the set
         }
         let no = mask & !letter_mask;
-        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, limit, memo);
+        // In the YES branch, we know this letter exists in all words
+        let letter_bit = 1u32 << idx;
+        let yes_known = known_letters | letter_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, known_letters, limit, memo);
 
         // Adding this split increases depth on both sides; "nos" and "hard_nos" increment along No.
         // cost = (0,0,1) + max(yes, no + (1,1,0))
@@ -405,6 +415,11 @@ fn solve(
             continue; // One or both letters in this pair are forbidden
         }
 
+        // Skip if we already know the requirement_letter exists in all words
+        if known_letters & requirement_bit != 0 {
+            continue; // requirement_letter is already known, soft test is redundant
+        }
+
         let yes = mask & ctx.letter_masks[test_idx];
         if yes == 0 || yes == mask {
             continue; // does not partition the set
@@ -418,8 +433,11 @@ fn solve(
 
         // Forbid both letters in children (any soft no containing either letter is now forbidden)
         let child_forbidden = forbidden_letters | test_bit | requirement_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, limit, memo);
+        // In the YES branch, we know the test_letter exists; in the NO branch, we know the requirement_letter exists
+        let yes_known = known_letters | test_bit;
+        let no_known = known_letters | requirement_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, no_known, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         // cost = (0,0,1) + max(yes, no + (1,0,0))
@@ -519,8 +537,11 @@ fn solve(
             continue; // does not partition the set
         }
         let no = mask & !letter_mask;
-        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, limit, memo);
+        // In the YES branch, we know this letter exists in all words (as first letter)
+        let letter_bit = 1u32 << idx;
+        let yes_known = known_letters | letter_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, known_letters, limit, memo);
 
         // Hard split on first letter: same cost structure as regular hard split
         let yes_cost = yes_sol.cost;
@@ -618,6 +639,11 @@ fn solve(
             continue;
         }
 
+        // Skip if we already know this letter exists in all words
+        if known_letters & letter_bit != 0 {
+            continue; // letter is already known, soft test is redundant
+        }
+
         let yes = mask & ctx.first_letter_masks[idx];
         if yes == 0 || yes == mask {
             continue; // does not partition the set
@@ -631,8 +657,11 @@ fn solve(
 
         // Forbid this letter in children
         let child_forbidden = forbidden_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, limit, memo);
+        // In YES branch, we know letter is first; in NO branch, we know letter is second
+        // Either way, the letter exists in all words
+        let child_known = known_letters | letter_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         let yes_cost = yes_sol.cost;
@@ -730,8 +759,11 @@ fn solve(
             continue; // does not partition the set
         }
         let no = mask & !letter_mask;
-        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, limit, memo);
+        // In the YES branch, we know this letter exists in all words (as last letter)
+        let letter_bit = 1u32 << idx;
+        let yes_known = known_letters | letter_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, known_letters, limit, memo);
 
         // Hard split on last letter: same cost structure as regular hard split
         let yes_cost = yes_sol.cost;
@@ -829,6 +861,11 @@ fn solve(
             continue;
         }
 
+        // Skip if we already know this letter exists in all words
+        if known_letters & letter_bit != 0 {
+            continue; // letter is already known, soft test is redundant
+        }
+
         let yes = mask & ctx.last_letter_masks[idx];
         if yes == 0 || yes == mask {
             continue; // does not partition the set
@@ -842,8 +879,11 @@ fn solve(
 
         // Forbid this letter in children
         let child_forbidden = forbidden_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, limit, memo);
+        // In YES branch, we know letter is last; in NO branch, we know letter is second-to-last
+        // Either way, the letter exists in all words
+        let child_known = known_letters | letter_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         let yes_cost = yes_sol.cost;
@@ -1031,7 +1071,7 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
     };
     let mask = if words.len() == 16 { u16::MAX } else { (1u16 << words.len()) - 1 };
     let mut memo = HashMap::new();
-    solve(mask, &ctx, allow_repeat, 0, limit, &mut memo)
+    solve(mask, &ctx, allow_repeat, 0, 0, limit, &mut memo)
 }
 
 pub fn format_tree(node: &Node) -> String {
@@ -1427,9 +1467,9 @@ mod tests {
     fn simple_split_cost() {
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false);
-        // With first/last letter splits, we can now use soft splits more effectively
-        // The new optimal tree uses a soft split, reducing sum_hard_nos from 2 to 1
-        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 1, depth: 2, word_count: 3 });
+        // With the known_letters constraint, we can't use soft tests when the requirement letter is already known
+        // This limits optimization slightly compared to before
+        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 2, depth: 2, word_count: 3 });
     }
 
     #[test]
@@ -1439,9 +1479,25 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        // With soft no pairs, first/last letter splits (same letter in adjacent positions), and the new cost function
-        // The same-letter positional soft splits reduce sum_nos by finding efficient adjacency patterns
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 11, sum_hard_nos: 9, depth: 5, word_count: 12 });
-        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 9, depth: 6, word_count: 12 });
+        // Regression test: R/E pair + C/G pair enable all-soft-test trees
+        // With R/E and C/G soft pairs, Virgo/Scorpio can be separated by:
+        //   1. "Contains 'r'? (all No contain 'e')" - soft
+        //   2. "Contains 'c'? (all No contain 'g')" - soft (Scorpio has c, Virgo has g)
+        // This achieves hard_nos: 0!
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 0, sum_nos: 11, sum_hard_nos: 7, depth: 5, word_count: 12 });
+        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 10, depth: 6, word_count: 12 });
+    }
+
+    #[test]
+    fn virgo_scorpio_soft_separation() {
+        // Verify that Virgo and Scorpio CAN be separated using only soft tests
+        // This is possible with R/E and C/G pairs:
+        //   virgo: has {v,i,r,g,o} - has 'r' and 'g', no 'c'
+        //   scorpio: has {s,c,o,r,p,i} - has 'r' and 'c', no 'g'
+        //   gemini: has {g,e,m,i,n} - has 'e' and 'g', no 'r' or 'c'
+        let data = words(&["virgo", "scorpio", "gemini"]);
+        let sol = minimal_trees(&data, true);
+        // Should achieve hard_nos: 0 using: r/e soft, then c/g soft
+        assert_eq!(sol.cost.hard_nos, 0, "Expected 0 hard NOs (all soft), got {}", sol.cost.hard_nos);
     }
 }
