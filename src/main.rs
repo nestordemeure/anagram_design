@@ -11,13 +11,15 @@ fn zodiac_words() -> Vec<String> {
 
 fn print_solutions(allow_repeat: bool) {
     let words = zodiac_words();
-    let result = minimal_trees_limited(&words, allow_repeat, Some(2000));
-    let preview = 10usize.min(result.trees.len());
+    const DISPLAY: usize = 10;
+    let result = minimal_trees_limited(&words, allow_repeat, Some(DISPLAY));
+    let preview = DISPLAY.min(result.trees.len());
     println!(
-        "Allow repeat: {} | Best cost = (depth {}, repeat {}) | {} tree(s)",
+        "Allow repeat: {} | Best cost = (nos {}, repeat {}, depth {}) | {} tree(s)",
         allow_repeat,
-        result.cost.depth,
+        result.cost.nos,
         result.cost.repeats,
+        result.cost.depth,
         result.trees.len()
     );
     for (idx, tree) in result.trees.iter().take(preview).enumerate() {

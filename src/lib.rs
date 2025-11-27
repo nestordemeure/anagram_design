@@ -3,23 +3,21 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cost {
-    pub depth: u32,
+    /// Number of No-edges on the heaviest path (primary objective).
+    pub nos: u32,
+    /// Number of Repeat nodes on that path (secondary objective).
     pub repeats: u32,
-}
-
-impl Cost {
-    fn with_extra_depth(self, extra: u32) -> Self {
-        Self {
-            depth: self.depth + extra,
-            repeats: self.repeats,
-        }
-    }
+    /// Total depth (edges) on that path (tertiary tie-breaker).
+    pub depth: u32,
 }
 
 impl Ord for Cost {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.depth.cmp(&other.depth) {
-            Ordering::Equal => self.repeats.cmp(&other.repeats),
+        match self.nos.cmp(&other.nos) {
+            Ordering::Equal => match self.repeats.cmp(&other.repeats) {
+                Ordering::Equal => self.depth.cmp(&other.depth),
+                ord => ord,
+            },
             ord => ord,
         }
     }
@@ -123,7 +121,7 @@ fn solve(
     if count == 1 {
         let word = single_word_from_mask(mask, ctx.words).expect("mask must map to a word");
         let sol = Solution {
-            cost: Cost { depth: 0, repeats: 0 },
+            cost: Cost { nos: 0, repeats: 0, depth: 0 },
             trees: vec![Node::Leaf(word)],
             exhausted: false,
         };
@@ -138,7 +136,7 @@ fn solve(
     // Repeat node option for exactly two words
     if allow_repeat && count == 2 {
         if let Some((w1, w2)) = two_words_from_mask(mask, ctx.words) {
-            best_cost = Some(Cost { depth: 0, repeats: 1 });
+            best_cost = Some(Cost { nos: 0, repeats: 1, depth: 0 });
             if !push_limited(&mut best_trees, limit, Node::Repeat(w1, w2)) {
                 exhausted = true;
             }
@@ -154,7 +152,21 @@ fn solve(
         let yes_sol = solve(yes, ctx, allow_repeat, limit, memo);
         let no_sol = solve(no, ctx, allow_repeat, limit, memo);
 
-        let branch_cost = std::cmp::max(yes_sol.cost, no_sol.cost).with_extra_depth(1);
+        // Adding this split increases depth on both sides; "nos" only increments along No.
+        // cost = (0,0,1) + max(yes, no + (1,0,0))
+        let yes_cost = yes_sol.cost;
+        let no_cost = Cost {
+            nos: no_sol.cost.nos + 1,
+            repeats: no_sol.cost.repeats,
+            depth: no_sol.cost.depth,
+        };
+        let dominant = std::cmp::max(yes_cost, no_cost);
+        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1; // true tree height
+        let branch_cost = Cost {
+            nos: dominant.nos,
+            repeats: dominant.repeats,
+            depth: branch_depth,
+        };
 
         match best_cost {
             None => {
@@ -257,41 +269,49 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
 }
 
 pub fn format_tree(node: &Node) -> String {
-    fn helper(node: &Node, indent: &str, output: &mut String) {
+    // Mimic the `tree` CLI look with box-drawing characters.
+    fn render(node: &Node, prefix: &str, is_last: bool, label: &str, out: &mut String) {
+        let connector = if prefix.is_empty() {
+            "" // root
+        } else if is_last {
+            "└─ "
+        } else {
+            "├─ "
+        };
+
         match node {
             Node::Leaf(word) => {
-                output.push_str(indent);
-                output.push_str(&format!("Leaf: {}\n", word));
+                out.push_str(prefix);
+                out.push_str(connector);
+                out.push_str(label);
+                out.push_str(&format!("Leaf: {}\n", word));
             }
             Node::Repeat(a, b) => {
-                output.push_str(indent);
-                output.push_str(&format!("Repeat: {} / {}\n", a, b));
+                out.push_str(prefix);
+                out.push_str(connector);
+                out.push_str(label);
+                out.push_str(&format!("Repeat: {} / {}\n", a, b));
             }
             Node::Split { letter, yes, no } => {
-                output.push_str(indent);
-                output.push_str(&format!("? contains '{}':\n", letter));
-                let next = format!("{}  ", indent);
-                output.push_str(&format!("{}Y -> ", indent));
-                match **yes {
-                    Node::Leaf(_) | Node::Repeat(_, _) => helper(yes, &format!("{}     ", indent), output),
-                    Node::Split { .. } => {
-                        output.push('\n');
-                        helper(yes, &next, output)
-                    }
-                }
-                output.push_str(&format!("{}N -> ", indent));
-                match **no {
-                    Node::Leaf(_) | Node::Repeat(_, _) => helper(no, &format!("{}     ", indent), output),
-                    Node::Split { .. } => {
-                        output.push('\n');
-                        helper(no, &next, output)
-                    }
-                }
+                out.push_str(prefix);
+                out.push_str(connector);
+                out.push_str(label);
+                out.push_str(&format!("Contains '{}'\n", letter));
+
+                let child_prefix = if is_last {
+                    format!("{}    ", prefix)
+                } else {
+                    format!("{}│   ", prefix)
+                };
+
+                render(no, &child_prefix, false, "No: ", out);
+                render(yes, &child_prefix, true, "Yes: ", out);
             }
         }
     }
+
     let mut out = String::new();
-    helper(node, "", &mut out);
+    render(node, "", true, "", &mut out);
     out
 }
 
@@ -316,7 +336,7 @@ mod tests {
     fn simple_split_cost() {
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false);
-        assert_eq!(sol.cost, Cost { depth: 2, repeats: 0 });
+        assert_eq!(sol.cost, Cost { nos: 1, repeats: 0, depth: 2 });
     }
 
     #[test]
@@ -326,7 +346,7 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        assert_eq!(allow_repeat.cost, Cost { depth: 3, repeats: 1 });
-        assert_eq!(no_repeat.cost, Cost { depth: 4, repeats: 0 });
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, repeats: 0, depth: 5 });
+        assert_eq!(no_repeat.cost, Cost { nos: 2, repeats: 0, depth: 6 });
     }
 }
