@@ -112,8 +112,6 @@ pub struct Solution {
 struct Key {
     mask: u16,
     allow_repeat: bool,
-    /// Bitmask of forbidden letters (bit for each letter a-z used in ancestor soft nos)
-    forbidden_letters: u32,
     /// Bitmask of known letters (letters we know exist in all words in this branch)
     known_letters: u32,
 }
@@ -326,12 +324,11 @@ fn solve(
     mask: u16,
     ctx: &Context<'_>,
     allow_repeat: bool,
-    forbidden_letters: u32,
     known_letters: u32,
     limit: Option<usize>,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
-    let key = Key { mask, allow_repeat, forbidden_letters, known_letters };
+    let key = Key { mask, allow_repeat, known_letters };
     if let Some(hit) = memo.get(&key) {
         return hit.clone();
     }
@@ -373,8 +370,8 @@ fn solve(
         // In the YES branch, we know this letter exists in all words
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, known_letters, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, known_letters, limit, memo);
 
         // Adding this split increases depth on both sides; the No branch increments both hard_nos and nos.
         let yes_cost = yes_sol.cost;
@@ -471,17 +468,8 @@ fn solve(
         let test_idx = (pair.test_letter as u8 - b'a') as usize;
         let requirement_idx = (pair.requirement_letter as u8 - b'a') as usize;
 
-        // Check if either letter in this pair is forbidden
         let test_bit = 1u32 << test_idx;
         let requirement_bit = 1u32 << requirement_idx;
-        if forbidden_letters & (test_bit | requirement_bit) != 0 {
-            continue; // One or both letters in this pair are forbidden
-        }
-
-        // Skip if we already know the requirement_letter exists in all words
-        if known_letters & requirement_bit != 0 {
-            continue; // requirement_letter is already known, soft test is redundant
-        }
 
         let yes = mask & ctx.letter_masks[test_idx];
         if yes == 0 || yes == mask {
@@ -494,13 +482,11 @@ fn solve(
             continue; // not all No items contain the requirement letter
         }
 
-        // Forbid both letters in children (any soft no containing either letter is now forbidden)
-        let child_forbidden = forbidden_letters | test_bit | requirement_bit;
         // In the YES branch, we know the test_letter exists; in the NO branch, we know the requirement_letter exists
         let yes_known = known_letters | test_bit;
         let no_known = known_letters | requirement_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, no_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, no_known, limit, memo);
 
         // Soft split: No branch increments nos but leaves hard_nos unchanged.
         let yes_cost = yes_sol.cost;
@@ -596,10 +582,6 @@ fn solve(
     // Soft double-letter splits: Yes has two of test_letter; No has two of a different uniform letter
     for test_idx in 0..26 {
         let test_bit = 1u32 << test_idx;
-        if forbidden_letters & test_bit != 0 {
-            continue;
-        }
-
         let yes = mask & ctx.double_letter_masks[test_idx];
         if yes == 0 || yes == mask {
             continue; // no partition or everyone has the double letter
@@ -624,16 +606,11 @@ fn solve(
         };
 
         let requirement_bit = 1u32 << requirement_idx;
-        if forbidden_letters & requirement_bit != 0 {
-            continue;
-        }
 
-        // Forbid both letters in children
-        let child_forbidden = forbidden_letters | test_bit | requirement_bit;
         let yes_known = known_letters | test_bit;
         let no_known = known_letters | requirement_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, no_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, no_known, limit, memo);
 
         // Soft edge: increment nos, not hard_nos
         let yes_cost = yes_sol.cost;
@@ -736,8 +713,8 @@ fn solve(
         // In the YES branch, we know this letter exists in all words (as first letter)
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, known_letters, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, known_letters, limit, memo);
 
         // Hard split on first letter: same cost structure as regular hard split
         let yes_cost = yes_sol.cost;
@@ -830,17 +807,7 @@ fn solve(
 
     // Soft first-letter splits: test first letter, require all No items have the same letter as second letter
     for idx in 0..26 {
-        // Check if this letter is forbidden
         let letter_bit = 1u32 << idx;
-        if forbidden_letters & letter_bit != 0 {
-            continue;
-        }
-
-        // Skip if we already know this letter exists in all words
-        if known_letters & letter_bit != 0 {
-            continue; // letter is already known, soft test is redundant
-        }
-
         let yes = mask & ctx.first_letter_masks[idx];
         if yes == 0 || yes == mask {
             continue; // does not partition the set
@@ -852,13 +819,11 @@ fn solve(
             continue;
         }
 
-        // Forbid this letter in children
-        let child_forbidden = forbidden_letters | letter_bit;
         // In YES branch, we know letter is first; in NO branch, we know letter is second
         // Either way, the letter exists in all words
         let child_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         let yes_cost = yes_sol.cost;
@@ -954,13 +919,6 @@ fn solve(
     for pos in 1..=3 {
         for idx in 0..26 {
             let letter_bit = 1u32 << idx;
-            if forbidden_letters & letter_bit != 0 {
-                continue;
-            }
-            if known_letters & letter_bit != 0 {
-                continue;
-            }
-
             let yes = mask & position_mask(ctx, false, pos, idx);
             if yes == 0 || yes == mask {
                 continue;
@@ -972,10 +930,9 @@ fn solve(
                 continue;
             }
 
-            let child_forbidden = forbidden_letters | letter_bit;
             let child_known = known_letters | letter_bit;
-            let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
-            let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+            let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
+            let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
 
             let yes_cost = yes_sol.cost;
             let no_cost = Cost {
@@ -1071,13 +1028,6 @@ fn solve(
     for pos in 1..=3 {
         for idx in 0..26 {
             let letter_bit = 1u32 << idx;
-            if forbidden_letters & letter_bit != 0 {
-                continue;
-            }
-            if known_letters & letter_bit != 0 {
-                continue;
-            }
-
             let yes = mask & position_mask(ctx, true, pos, idx);
             if yes == 0 || yes == mask {
                 continue;
@@ -1089,10 +1039,9 @@ fn solve(
                 continue;
             }
 
-            let child_forbidden = forbidden_letters | letter_bit;
             let child_known = known_letters | letter_bit;
-            let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
-            let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+            let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
+            let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
 
             let yes_cost = yes_sol.cost;
             let no_cost = Cost {
@@ -1194,8 +1143,8 @@ fn solve(
         // In the YES branch, we know this letter exists in all words (as last letter)
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, known_letters, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, known_letters, limit, memo);
 
         // Hard split on last letter: same cost structure as regular hard split
         let yes_cost = yes_sol.cost;
@@ -1288,16 +1237,7 @@ fn solve(
 
     // Soft last-letter splits: test last letter, require all No items have the same letter as second-to-last letter
     for idx in 0..26 {
-        // Check if this letter is forbidden
         let letter_bit = 1u32 << idx;
-        if forbidden_letters & letter_bit != 0 {
-            continue;
-        }
-
-        // Skip if we already know this letter exists in all words
-        if known_letters & letter_bit != 0 {
-            continue; // letter is already known, soft test is redundant
-        }
 
         let yes = mask & ctx.last_letter_masks[idx];
         if yes == 0 || yes == mask {
@@ -1310,13 +1250,11 @@ fn solve(
             continue;
         }
 
-        // Forbid this letter in children
-        let child_forbidden = forbidden_letters | letter_bit;
         // In YES branch, we know letter is last; in NO branch, we know letter is second-to-last
         // Either way, the letter exists in all words
         let child_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         let yes_cost = yes_sol.cost;
@@ -1561,7 +1499,7 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
     };
     let mask = if words.len() == 16 { u16::MAX } else { (1u16 << words.len()) - 1 };
     let mut memo = HashMap::new();
-    solve(mask, &ctx, allow_repeat, 0, 0, limit, &mut memo)
+    solve(mask, &ctx, allow_repeat, 0, limit, &mut memo)
 }
 
 pub fn format_tree(node: &Node) -> String {
@@ -2127,9 +2065,7 @@ mod tests {
     fn simple_split_cost() {
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false);
-        // With the known_letters constraint, we can't use soft tests when the requirement letter is already known
-        // This limits optimization slightly compared to before
-        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 2, depth: 2, word_count: 3 });
+        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 1, depth: 2, word_count: 3 });
     }
 
     #[test]
@@ -2144,8 +2080,8 @@ mod tests {
         //   1. "Contains 'r'? (all No contain 'e')" - soft
         //   2. "Contains 'c'? (all No contain 'g')" - soft (Scorpio has c, Virgo has g)
         // This achieves hard_nos: 0!
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 11, sum_hard_nos: 7, depth: 5, word_count: 12 });
-        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 7, depth: 6, word_count: 12 });
+        assert_eq!(allow_repeat.cost, Cost { nos: 3, hard_nos: 0, sum_nos: 16, sum_hard_nos: 0, depth: 5, word_count: 12 });
+        assert_eq!(no_repeat.cost, Cost { nos: 3, hard_nos: 0, sum_nos: 20, sum_hard_nos: 0, depth: 7, word_count: 12 });
     }
 
     #[test]
@@ -2162,6 +2098,22 @@ mod tests {
     }
 
     #[test]
+    fn soft_known_letter_pruning_regression() {
+        // Under the written rules, two nested soft tests should give 0 hard NOs:
+        //   1) Contains 'r'? (all No contain 'e')
+        //   2) In the Yes branch, Contains 't'? (all No contain 'r')
+        // Current solver skips step (2) because 'r' is already known, so it returns hard_nos = 1.
+        let data = words(&["tr", "r", "e"]);
+        let sol = minimal_trees(&data, false);
+        assert_eq!(
+            sol.cost,
+            Cost { hard_nos: 0, nos: 1, sum_hard_nos: 0, sum_nos: 2, depth: 2, word_count: 3 },
+            "Expected fully-soft separation with 0 hard NOs; got {:?}",
+            sol.cost
+        );
+    }
+
+    #[test]
     fn recomputed_cost_matches_expected_for_top_tree() {
         // Use the first printed allow_repeat tree to assert its true hard_no count.
         let data = words(&[
@@ -2170,11 +2122,7 @@ mod tests {
         let sol = minimal_trees_limited(&data, true, Some(1));
         let tree = &sol.trees[0];
         let cost = compute_cost(tree);
-        assert_eq!(
-            cost,
-            Cost { nos: 2, hard_nos: 1, sum_nos: 11, sum_hard_nos: 7, depth: 5, word_count: 12 },
-            "Recomputed cost for top allow_repeat tree should expose the hard-no count"
-        );
+        assert_eq!(cost, Cost { nos: 3, hard_nos: 0, sum_nos: 16, sum_hard_nos: 0, depth: 5, word_count: 12 });
     }
 
     #[test]
