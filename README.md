@@ -48,9 +48,14 @@ Includes regression tests and a Zodiac cost check for both settings.
 Build and view the browser UI (uses Pico CSS and the wasm-bindgen JS shim):
 
 ```bash
-rustup target add wasm32-unknown-unknown               # once
+# Setup toolchain, once
+rustup target add wasm32-unknown-unknown
+
+# Build the code to serve it
 cargo build --lib --target wasm32-unknown-unknown --release
 wasm-bindgen --target web --out-dir docs/pkg --no-typescript target/wasm32-unknown-unknown/release/anagram_design.wasm
+
+# Test the webpage
 python3 -m http.server 8000 --directory docs             # then open http://localhost:8000
 ```
 
