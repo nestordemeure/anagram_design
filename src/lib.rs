@@ -77,6 +77,20 @@ pub enum Node {
         yes: Box<Node>,
         no: Box<Node>,
     },
+    SoftMirrorPosSplit {
+        /// Letter to test
+        test_letter: char,
+        /// 1-based position from the tested end (1 = first/last)
+        test_index: u8,
+        /// true when counting from the end (last/second-to-last/third-to-last)
+        test_from_end: bool,
+        /// Position that all No items must carry the same letter in
+        requirement_index: u8,
+        /// true when the requirement position is counted from the end
+        requirement_from_end: bool,
+        yes: Box<Node>,
+        no: Box<Node>,
+    },
     SoftDoubleLetterSplit {
         /// Letter that must appear twice in the Yes branch
         test_letter: char,
@@ -120,8 +134,10 @@ struct Context<'a> {
     letter_masks: [u16; 26],
     first_letter_masks: [u16; 26],
     second_letter_masks: [u16; 26],
+    third_letter_masks: [u16; 26],
     last_letter_masks: [u16; 26],
     second_to_last_letter_masks: [u16; 26],
+    third_to_last_letter_masks: [u16; 26],
     double_letter_masks: [u16; 26],
 }
 
@@ -171,10 +187,26 @@ const SOFT_NO_PAIRS: &[SoftNoPair] = &[
     // R/E pair
     SoftNoPair { test_letter: 'r', requirement_letter: 'e' },
     SoftNoPair { test_letter: 'e', requirement_letter: 'r' },
+
+    // A/R pair - similar open shapes in block capitals
+    SoftNoPair { test_letter: 'a', requirement_letter: 'r' },
+    SoftNoPair { test_letter: 'r', requirement_letter: 'a' },
 ];
 
 fn mask_count(mask: u16) -> u32 {
     mask.count_ones()
+}
+
+fn position_mask(ctx: &Context<'_>, from_end: bool, pos_index: u8, letter_idx: usize) -> u16 {
+    match (from_end, pos_index) {
+        (false, 1) => ctx.first_letter_masks[letter_idx],
+        (false, 2) => ctx.second_letter_masks[letter_idx],
+        (false, 3) => ctx.third_letter_masks[letter_idx],
+        (true, 1) => ctx.last_letter_masks[letter_idx],
+        (true, 2) => ctx.second_to_last_letter_masks[letter_idx],
+        (true, 3) => ctx.third_to_last_letter_masks[letter_idx],
+        _ => 0,
+    }
 }
 
 fn single_word_from_mask(mask: u16, words: &[String]) -> Option<String> {
@@ -246,6 +278,26 @@ fn combine_soft_last_letter_children(test_letter: char, requirement_letter: char
     Node::SoftLastLetterSplit {
         test_letter,
         requirement_letter,
+        yes: Box::new(left.clone()),
+        no: Box::new(right.clone()),
+    }
+}
+
+fn combine_soft_mirror_pos_children(
+    test_letter: char,
+    test_index: u8,
+    test_from_end: bool,
+    requirement_index: u8,
+    requirement_from_end: bool,
+    left: &Node,
+    right: &Node,
+) -> Node {
+    Node::SoftMirrorPosSplit {
+        test_letter,
+        test_index,
+        test_from_end,
+        requirement_index,
+        requirement_from_end,
         yes: Box::new(left.clone()),
         no: Box::new(right.clone()),
     }
@@ -898,6 +950,240 @@ fn solve(
         }
     }
 
+    // Positional mirror soft splits: test position from the start, require the mirror position from the end (1st↔last, 2nd↔second-to-last, 3rd↔third-to-last)
+    for pos in 1..=3 {
+        for idx in 0..26 {
+            let letter_bit = 1u32 << idx;
+            if forbidden_letters & letter_bit != 0 {
+                continue;
+            }
+            if known_letters & letter_bit != 0 {
+                continue;
+            }
+
+            let yes = mask & position_mask(ctx, false, pos, idx);
+            if yes == 0 || yes == mask {
+                continue;
+            }
+            let no = mask & !position_mask(ctx, false, pos, idx);
+
+            // All No items must carry the same letter in the mirrored-from-end position
+            if no & position_mask(ctx, true, pos, idx) != no {
+                continue;
+            }
+
+            let child_forbidden = forbidden_letters | letter_bit;
+            let child_known = known_letters | letter_bit;
+            let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+            let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+
+            let yes_cost = yes_sol.cost;
+            let no_cost = Cost {
+                nos: no_sol.cost.nos + 1,
+                hard_nos: no_sol.cost.hard_nos,
+                sum_nos: no_sol.cost.sum_nos,
+                sum_hard_nos: no_sol.cost.sum_hard_nos,
+                depth: no_sol.cost.depth,
+                word_count: no_sol.cost.word_count,
+            };
+            let nos = yes_cost.nos.max(no_cost.nos);
+            let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+            let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+            let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+            let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
+            let branch_cost = Cost {
+                nos,
+                hard_nos,
+                sum_nos: total_sum_nos,
+                sum_hard_nos: total_sum_hard_nos,
+                depth: branch_depth,
+                word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+            };
+
+            let letter = (b'a' + idx as u8) as char;
+            match best_cost {
+                None => {
+                    best_cost = Some(branch_cost);
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_mirror_pos_children(letter, pos, false, pos, true, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Some(current) => match branch_cost.cmp(&current) {
+                    Ordering::Less => {
+                        best_trees.clear();
+                        best_cost = Some(branch_cost);
+                        exhausted = false;
+                        for y in &yes_sol.trees {
+                            for n in &no_sol.trees {
+                                if !push_limited(
+                                    &mut best_trees,
+                                    limit,
+                                    combine_soft_mirror_pos_children(letter, pos, false, pos, true, y, n),
+                                ) {
+                                    exhausted = true;
+                                    break;
+                                }
+                            }
+                            if exhausted {
+                                break;
+                            }
+                        }
+                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                    }
+                    Ordering::Equal => {
+                        for y in &yes_sol.trees {
+                            for n in &no_sol.trees {
+                                if !push_limited(
+                                    &mut best_trees,
+                                    limit,
+                                    combine_soft_mirror_pos_children(letter, pos, false, pos, true, y, n),
+                                ) {
+                                    exhausted = true;
+                                    break;
+                                }
+                            }
+                            if exhausted {
+                                break;
+                            }
+                        }
+                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                    }
+                    Ordering::Greater => {}
+                },
+            }
+        }
+    }
+
+    // Positional mirror soft splits: test position from the end, require the mirror position from the start (last↔first, etc.)
+    for pos in 1..=3 {
+        for idx in 0..26 {
+            let letter_bit = 1u32 << idx;
+            if forbidden_letters & letter_bit != 0 {
+                continue;
+            }
+            if known_letters & letter_bit != 0 {
+                continue;
+            }
+
+            let yes = mask & position_mask(ctx, true, pos, idx);
+            if yes == 0 || yes == mask {
+                continue;
+            }
+            let no = mask & !position_mask(ctx, true, pos, idx);
+
+            // All No items must carry the same letter in the mirrored-from-start position
+            if no & position_mask(ctx, false, pos, idx) != no {
+                continue;
+            }
+
+            let child_forbidden = forbidden_letters | letter_bit;
+            let child_known = known_letters | letter_bit;
+            let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+            let no_sol = solve(no, ctx, allow_repeat, child_forbidden, child_known, limit, memo);
+
+            let yes_cost = yes_sol.cost;
+            let no_cost = Cost {
+                nos: no_sol.cost.nos + 1,
+                hard_nos: no_sol.cost.hard_nos,
+                sum_nos: no_sol.cost.sum_nos,
+                sum_hard_nos: no_sol.cost.sum_hard_nos,
+                depth: no_sol.cost.depth,
+                word_count: no_sol.cost.word_count,
+            };
+            let nos = yes_cost.nos.max(no_cost.nos);
+            let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+            let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+            let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+            let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
+            let branch_cost = Cost {
+                nos,
+                hard_nos,
+                sum_nos: total_sum_nos,
+                sum_hard_nos: total_sum_hard_nos,
+                depth: branch_depth,
+                word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+            };
+
+            let letter = (b'a' + idx as u8) as char;
+            match best_cost {
+                None => {
+                    best_cost = Some(branch_cost);
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_mirror_pos_children(letter, pos, true, pos, false, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Some(current) => match branch_cost.cmp(&current) {
+                    Ordering::Less => {
+                        best_trees.clear();
+                        best_cost = Some(branch_cost);
+                        exhausted = false;
+                        for y in &yes_sol.trees {
+                            for n in &no_sol.trees {
+                                if !push_limited(
+                                    &mut best_trees,
+                                    limit,
+                                    combine_soft_mirror_pos_children(letter, pos, true, pos, false, y, n),
+                                ) {
+                                    exhausted = true;
+                                    break;
+                                }
+                            }
+                            if exhausted {
+                                break;
+                            }
+                        }
+                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                    }
+                    Ordering::Equal => {
+                        for y in &yes_sol.trees {
+                            for n in &no_sol.trees {
+                                if !push_limited(
+                                    &mut best_trees,
+                                    limit,
+                                    combine_soft_mirror_pos_children(letter, pos, true, pos, false, y, n),
+                                ) {
+                                    exhausted = true;
+                                    break;
+                                }
+                            }
+                            if exhausted {
+                                break;
+                            }
+                        }
+                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                    }
+                    Ordering::Greater => {}
+                },
+            }
+        }
+    }
+
     // Last-letter hard splits
     for (idx, letter_mask) in ctx.last_letter_masks.iter().enumerate() {
         let yes = mask & letter_mask;
@@ -1170,6 +1456,19 @@ fn make_second_letter_masks(words: &[String]) -> [u16; 26] {
     masks
 }
 
+fn make_third_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        if let Some(ch) = w.chars().nth(2) {
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
 fn make_last_letter_masks(words: &[String]) -> [u16; 26] {
     let mut masks = [0u16; 26];
     for (idx, w) in words.iter().enumerate() {
@@ -1189,6 +1488,21 @@ fn make_second_to_last_letter_masks(words: &[String]) -> [u16; 26] {
         let chars: Vec<char> = w.chars().collect();
         if chars.len() >= 2 {
             let ch = chars[chars.len() - 2];
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
+fn make_third_to_last_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        let chars: Vec<char> = w.chars().collect();
+        if chars.len() >= 3 {
+            let ch = chars[chars.len() - 3];
             if ch.is_ascii_alphabetic() {
                 let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
                 masks[l] |= 1u16 << idx;
@@ -1229,16 +1543,20 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
     let letter_masks = make_letter_masks(words);
     let first_letter_masks = make_first_letter_masks(words);
     let second_letter_masks = make_second_letter_masks(words);
+    let third_letter_masks = make_third_letter_masks(words);
     let last_letter_masks = make_last_letter_masks(words);
     let second_to_last_letter_masks = make_second_to_last_letter_masks(words);
+    let third_to_last_letter_masks = make_third_to_last_letter_masks(words);
     let double_letter_masks = make_double_letter_masks(words);
     let ctx = Context {
         words,
         letter_masks,
         first_letter_masks,
         second_letter_masks,
+        third_letter_masks,
         last_letter_masks,
         second_to_last_letter_masks,
+        third_to_last_letter_masks,
         double_letter_masks,
     };
     let mask = if words.len() == 16 { u16::MAX } else { (1u16 << words.len()) - 1 };
@@ -1253,6 +1571,18 @@ pub fn format_tree(node: &Node) -> String {
         match chars.next() {
             None => String::new(),
             Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        }
+    }
+
+    fn describe_pos(from_end: bool, idx: u8) -> String {
+        match (from_end, idx) {
+            (false, 1) => "first".to_string(),
+            (false, 2) => "second".to_string(),
+            (false, 3) => "third".to_string(),
+            (true, 1) => "last".to_string(),
+            (true, 2) => "second-to-last".to_string(),
+            (true, 3) => "third-to-last".to_string(),
+            _ => format!("pos {}", idx),
         }
     }
 
@@ -1346,6 +1676,20 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str("'? (all No have '");
                 out.push(*requirement_letter);
                 out.push_str("' second-to-last)\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+                render_yes_final(yes, &child_prefix, out);
+            }
+            Node::SoftMirrorPosSplit { test_letter, test_index, test_from_end, requirement_index, requirement_from_end, yes, no } => {
+                out.push_str(prefix);
+                out.push_str("└─ No: ");
+                out.push_str(&describe_pos(*test_from_end, *test_index));
+                out.push_str(" letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have it ");
+                out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
+                out.push_str(")\n");
 
                 let child_prefix = format!("{}   ", prefix);
                 render_no_branch(no, &format!("{}│", child_prefix), out);
@@ -1483,6 +1827,25 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str("'? (all No have '");
                 out.push(*requirement_letter);
                 out.push_str("' second-to-last)\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
+            Node::SoftMirrorPosSplit { test_letter, test_index, test_from_end, requirement_index, requirement_from_end, yes, no } => {
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str(&describe_pos(*test_from_end, *test_index));
+                out.push_str(" letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have it ");
+                out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
+                out.push_str(")\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
 
@@ -1640,6 +2003,22 @@ pub fn format_tree(node: &Node) -> String {
                 // Continue down the Yes spine
                 render_spine(yes, prefix, is_final, out);
             }
+            Node::SoftMirrorPosSplit { test_letter, test_index, test_from_end, requirement_index, requirement_from_end, yes, no } => {
+                out.push_str(prefix);
+                out.push_str(&describe_pos(*test_from_end, *test_index));
+                out.push_str(" letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have it ");
+                out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
+                out.push_str(")\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_spine(yes, prefix, is_final, out);
+            }
             Node::SoftDoubleLetterSplit { test_letter, requirement_letter, yes, no } => {
                 out.push_str(prefix);
                 out.push_str("Double '");
@@ -1706,6 +2085,7 @@ mod tests {
             Node::SoftSplit { yes, no, .. }
             | Node::SoftFirstLetterSplit { yes, no, .. }
             | Node::SoftLastLetterSplit { yes, no, .. }
+            | Node::SoftMirrorPosSplit { yes, no, .. }
             | Node::SoftDoubleLetterSplit { yes, no, .. } => {
                 let yes_cost = compute_cost(yes);
                 let no_cost_base = compute_cost(no);
@@ -1835,6 +2215,23 @@ mod tests {
                 assert!(matches!(**no, Node::Repeat(_, _)));
             }
             other => panic!("expected SoftDoubleLetterSplit root, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn soft_mirror_first_last_split_works() {
+        // Front test, back requirement mirror keeps the miss soft
+        let data = words(&["axe", "exa"]);
+        let sol = minimal_trees_limited(&data, false, Some(1));
+        assert_eq!(
+            sol.cost,
+            Cost { nos: 1, hard_nos: 0, sum_nos: 1, sum_hard_nos: 0, depth: 1, word_count: 2 }
+        );
+        match &sol.trees[0] {
+            Node::SoftMirrorPosSplit { test_letter, test_index, test_from_end, requirement_index, requirement_from_end, .. } => {
+                assert_eq!((*test_letter, *test_index, *test_from_end, *requirement_index, *requirement_from_end), ('a', 1, false, 1, true));
+            }
+            other => panic!("expected SoftMirrorPosSplit root, got {other:?}"),
         }
     }
 }

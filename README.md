@@ -11,8 +11,9 @@ Nodes are yes/no questions that partition the word set:
   - `Last letter 'x'?`
   - A No edge adds 1 to both `nos` and `hard_nos`.
 - **Soft splits**
-  - Contains soft: `Contains 'i'? (all No contain 'e')` for defined pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E).
+  - Contains soft: `Contains 'i'? (all No contain 'e')` for defined pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R).
   - Positional soft: `First letter 'a'? (all No have 'a' second)` and `Last letter 's'? (all No have 's' second-to-last)`.
+  - Positional mirror soft: mirror the same letter between start/end positions: `First letter 'a'? (all No have 'a' last)`, `Second letter 'a'? (all No have 'a' second-to-last)`, `Third letter 'a'? (all No have 'a' third-to-last)`, plus the reverse direction (last→first, etc.).
   - Double-letter soft: `Double 'o'? (all No double 'l')` — Yes branch has two of the test letter; No branch has two of a different uniform letter.
   - A No edge adds 1 to `nos` only.
 - **Leaves / Repeat** (only when exactly two words): cost `(0,0,0,0,0)`.
