@@ -58,6 +58,32 @@ pub enum Node {
         yes: Box<Node>,
         no: Box<Node>,
     },
+    FirstLetterSplit {
+        letter: char,
+        yes: Box<Node>,
+        no: Box<Node>,
+    },
+    SoftFirstLetterSplit {
+        /// Letter to test as first letter
+        test_letter: char,
+        /// Letter that all No items must have as second letter
+        requirement_letter: char,
+        yes: Box<Node>,
+        no: Box<Node>,
+    },
+    LastLetterSplit {
+        letter: char,
+        yes: Box<Node>,
+        no: Box<Node>,
+    },
+    SoftLastLetterSplit {
+        /// Letter to test as last letter
+        test_letter: char,
+        /// Letter that all No items must have as second-to-last letter
+        requirement_letter: char,
+        yes: Box<Node>,
+        no: Box<Node>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -89,6 +115,10 @@ struct SoftNoPair {
 struct Context<'a> {
     words: &'a [String],
     letter_masks: [u16; 26],
+    first_letter_masks: [u16; 26],
+    second_letter_masks: [u16; 26],
+    last_letter_masks: [u16; 26],
+    second_to_last_letter_masks: [u16; 26],
 }
 
 /// Define the available soft no pairs
@@ -172,6 +202,40 @@ fn combine_children(letter: char, left: &Node, right: &Node) -> Node {
 
 fn combine_soft_children(test_letter: char, requirement_letter: char, left: &Node, right: &Node) -> Node {
     Node::SoftSplit {
+        test_letter,
+        requirement_letter,
+        yes: Box::new(left.clone()),
+        no: Box::new(right.clone()),
+    }
+}
+
+fn combine_first_letter_children(letter: char, left: &Node, right: &Node) -> Node {
+    Node::FirstLetterSplit {
+        letter,
+        yes: Box::new(left.clone()),
+        no: Box::new(right.clone()),
+    }
+}
+
+fn combine_soft_first_letter_children(test_letter: char, requirement_letter: char, left: &Node, right: &Node) -> Node {
+    Node::SoftFirstLetterSplit {
+        test_letter,
+        requirement_letter,
+        yes: Box::new(left.clone()),
+        no: Box::new(right.clone()),
+    }
+}
+
+fn combine_last_letter_children(letter: char, left: &Node, right: &Node) -> Node {
+    Node::LastLetterSplit {
+        letter,
+        yes: Box::new(left.clone()),
+        no: Box::new(right.clone()),
+    }
+}
+
+fn combine_soft_last_letter_children(test_letter: char, requirement_letter: char, left: &Node, right: &Node) -> Node {
+    Node::SoftLastLetterSplit {
         test_letter,
         requirement_letter,
         yes: Box::new(left.clone()),
@@ -448,6 +512,428 @@ fn solve(
         }
     }
 
+    // First-letter hard splits
+    for (idx, letter_mask) in ctx.first_letter_masks.iter().enumerate() {
+        let yes = mask & letter_mask;
+        if yes == 0 || yes == mask {
+            continue; // does not partition the set
+        }
+        let no = mask & !letter_mask;
+        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, limit, memo);
+
+        // Hard split on first letter: same cost structure as regular hard split
+        let yes_cost = yes_sol.cost;
+        let no_cost = Cost {
+            nos: no_sol.cost.nos + 1,
+            hard_nos: no_sol.cost.hard_nos + 1,
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
+            depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
+        };
+        let dominant = std::cmp::max(yes_cost, no_cost);
+        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
+        let branch_cost = Cost {
+            nos: dominant.nos,
+            hard_nos: dominant.hard_nos,
+            sum_nos: total_sum_nos,
+            sum_hard_nos: total_sum_hard_nos,
+            depth: branch_depth,
+            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+        };
+
+        match best_cost {
+            None => {
+                best_cost = Some(branch_cost);
+                for y in &yes_sol.trees {
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            &mut best_trees,
+                            limit,
+                            combine_first_letter_children((b'a' + idx as u8) as char, y, n),
+                        ) {
+                            exhausted = true;
+                            break;
+                        }
+                    }
+                    if exhausted {
+                        break;
+                    }
+                }
+                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+            }
+            Some(current) => match branch_cost.cmp(&current) {
+                Ordering::Less => {
+                    best_trees.clear();
+                    best_cost = Some(branch_cost);
+                    exhausted = false;
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_first_letter_children((b'a' + idx as u8) as char, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Equal => {
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_first_letter_children((b'a' + idx as u8) as char, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Greater => {}
+            },
+        }
+    }
+
+    // Soft first-letter splits: test first letter, require all No items have the same letter as second letter
+    for idx in 0..26 {
+        // Check if this letter is forbidden
+        let letter_bit = 1u32 << idx;
+        if forbidden_letters & letter_bit != 0 {
+            continue;
+        }
+
+        let yes = mask & ctx.first_letter_masks[idx];
+        if yes == 0 || yes == mask {
+            continue; // does not partition the set
+        }
+        let no = mask & !ctx.first_letter_masks[idx];
+
+        // Check if all items in the "no" set have the same letter as second letter
+        if no & ctx.second_letter_masks[idx] != no {
+            continue;
+        }
+
+        // Forbid this letter in children
+        let child_forbidden = forbidden_letters | letter_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, limit, memo);
+
+        // Soft split: nos increments, but hard_nos does not
+        let yes_cost = yes_sol.cost;
+        let no_cost = Cost {
+            nos: no_sol.cost.nos + 1,
+            hard_nos: no_sol.cost.hard_nos,
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
+            depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
+        };
+        let dominant = std::cmp::max(yes_cost, no_cost);
+        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
+        let branch_cost = Cost {
+            nos: dominant.nos,
+            hard_nos: dominant.hard_nos,
+            sum_nos: total_sum_nos,
+            sum_hard_nos: total_sum_hard_nos,
+            depth: branch_depth,
+            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+        };
+
+        let letter = (b'a' + idx as u8) as char;
+        match best_cost {
+            None => {
+                best_cost = Some(branch_cost);
+                for y in &yes_sol.trees {
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            &mut best_trees,
+                            limit,
+                            combine_soft_first_letter_children(letter, letter, y, n),
+                        ) {
+                            exhausted = true;
+                            break;
+                        }
+                    }
+                    if exhausted {
+                        break;
+                    }
+                }
+                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+            }
+            Some(current) => match branch_cost.cmp(&current) {
+                Ordering::Less => {
+                    best_trees.clear();
+                    best_cost = Some(branch_cost);
+                    exhausted = false;
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_first_letter_children(letter, letter, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Equal => {
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_first_letter_children(letter, letter, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Greater => {}
+            },
+        }
+    }
+
+    // Last-letter hard splits
+    for (idx, letter_mask) in ctx.last_letter_masks.iter().enumerate() {
+        let yes = mask & letter_mask;
+        if yes == 0 || yes == mask {
+            continue; // does not partition the set
+        }
+        let no = mask & !letter_mask;
+        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, limit, memo);
+
+        // Hard split on last letter: same cost structure as regular hard split
+        let yes_cost = yes_sol.cost;
+        let no_cost = Cost {
+            nos: no_sol.cost.nos + 1,
+            hard_nos: no_sol.cost.hard_nos + 1,
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
+            depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
+        };
+        let dominant = std::cmp::max(yes_cost, no_cost);
+        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
+        let branch_cost = Cost {
+            nos: dominant.nos,
+            hard_nos: dominant.hard_nos,
+            sum_nos: total_sum_nos,
+            sum_hard_nos: total_sum_hard_nos,
+            depth: branch_depth,
+            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+        };
+
+        match best_cost {
+            None => {
+                best_cost = Some(branch_cost);
+                for y in &yes_sol.trees {
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            &mut best_trees,
+                            limit,
+                            combine_last_letter_children((b'a' + idx as u8) as char, y, n),
+                        ) {
+                            exhausted = true;
+                            break;
+                        }
+                    }
+                    if exhausted {
+                        break;
+                    }
+                }
+                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+            }
+            Some(current) => match branch_cost.cmp(&current) {
+                Ordering::Less => {
+                    best_trees.clear();
+                    best_cost = Some(branch_cost);
+                    exhausted = false;
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_last_letter_children((b'a' + idx as u8) as char, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Equal => {
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_last_letter_children((b'a' + idx as u8) as char, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Greater => {}
+            },
+        }
+    }
+
+    // Soft last-letter splits: test last letter, require all No items have the same letter as second-to-last letter
+    for idx in 0..26 {
+        // Check if this letter is forbidden
+        let letter_bit = 1u32 << idx;
+        if forbidden_letters & letter_bit != 0 {
+            continue;
+        }
+
+        let yes = mask & ctx.last_letter_masks[idx];
+        if yes == 0 || yes == mask {
+            continue; // does not partition the set
+        }
+        let no = mask & !ctx.last_letter_masks[idx];
+
+        // Check if all items in the "no" set have the same letter as second-to-last letter
+        if no & ctx.second_to_last_letter_masks[idx] != no {
+            continue;
+        }
+
+        // Forbid this letter in children
+        let child_forbidden = forbidden_letters | letter_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, limit, memo);
+
+        // Soft split: nos increments, but hard_nos does not
+        let yes_cost = yes_sol.cost;
+        let no_cost = Cost {
+            nos: no_sol.cost.nos + 1,
+            hard_nos: no_sol.cost.hard_nos,
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
+            depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
+        };
+        let dominant = std::cmp::max(yes_cost, no_cost);
+        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
+        let branch_cost = Cost {
+            nos: dominant.nos,
+            hard_nos: dominant.hard_nos,
+            sum_nos: total_sum_nos,
+            sum_hard_nos: total_sum_hard_nos,
+            depth: branch_depth,
+            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+        };
+
+        let letter = (b'a' + idx as u8) as char;
+        match best_cost {
+            None => {
+                best_cost = Some(branch_cost);
+                for y in &yes_sol.trees {
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            &mut best_trees,
+                            limit,
+                            combine_soft_last_letter_children(letter, letter, y, n),
+                        ) {
+                            exhausted = true;
+                            break;
+                        }
+                    }
+                    if exhausted {
+                        break;
+                    }
+                }
+                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+            }
+            Some(current) => match branch_cost.cmp(&current) {
+                Ordering::Less => {
+                    best_trees.clear();
+                    best_cost = Some(branch_cost);
+                    exhausted = false;
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_last_letter_children(letter, letter, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Equal => {
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_last_letter_children(letter, letter, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Greater => {}
+            },
+        }
+    }
+
     let sol = Solution {
         cost: best_cost.expect("At least one tree must be found"),
         trees: best_trees,
@@ -470,6 +956,60 @@ fn make_letter_masks(words: &[String]) -> [u16; 26] {
     masks
 }
 
+fn make_first_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        if let Some(ch) = w.chars().next() {
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
+fn make_second_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        if let Some(ch) = w.chars().nth(1) {
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
+fn make_last_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        if let Some(ch) = w.chars().last() {
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
+fn make_second_to_last_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        let chars: Vec<char> = w.chars().collect();
+        if chars.len() >= 2 {
+            let ch = chars[chars.len() - 2];
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
 pub fn minimal_trees(words: &[String], allow_repeat: bool) -> Solution {
     minimal_trees_limited(words, allow_repeat, None)
 }
@@ -477,7 +1017,18 @@ pub fn minimal_trees(words: &[String], allow_repeat: bool) -> Solution {
 pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option<usize>) -> Solution {
     assert!(words.len() <= 16, "bitmask solver supports up to 16 words");
     let letter_masks = make_letter_masks(words);
-    let ctx = Context { words, letter_masks };
+    let first_letter_masks = make_first_letter_masks(words);
+    let second_letter_masks = make_second_letter_masks(words);
+    let last_letter_masks = make_last_letter_masks(words);
+    let second_to_last_letter_masks = make_second_to_last_letter_masks(words);
+    let ctx = Context {
+        words,
+        letter_masks,
+        first_letter_masks,
+        second_letter_masks,
+        last_letter_masks,
+        second_to_last_letter_masks,
+    };
     let mask = if words.len() == 16 { u16::MAX } else { (1u16 << words.len()) - 1 };
     let mut memo = HashMap::new();
     solve(mask, &ctx, allow_repeat, 0, limit, &mut memo)
@@ -540,6 +1091,54 @@ pub fn format_tree(node: &Node) -> String {
                 // The yes branch of this nested split uses └─ (it's the final item in this branch)
                 render_yes_final(yes, &child_prefix, out);
             }
+            Node::FirstLetterSplit { letter, yes, no } => {
+                // No branch that contains a first letter split
+                out.push_str(prefix);
+                out.push_str("└─ No: First letter '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+                render_yes_final(yes, &child_prefix, out);
+            }
+            Node::SoftFirstLetterSplit { test_letter, requirement_letter, yes, no } => {
+                // No branch that contains a soft first letter split
+                out.push_str(prefix);
+                out.push_str("└─ No: First letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have '");
+                out.push(*requirement_letter);
+                out.push_str("' second)\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+                render_yes_final(yes, &child_prefix, out);
+            }
+            Node::LastLetterSplit { letter, yes, no } => {
+                // No branch that contains a last letter split
+                out.push_str(prefix);
+                out.push_str("└─ No: Last letter '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+                render_yes_final(yes, &child_prefix, out);
+            }
+            Node::SoftLastLetterSplit { test_letter, requirement_letter, yes, no } => {
+                // No branch that contains a soft last letter split
+                out.push_str(prefix);
+                out.push_str("└─ No: Last letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have '");
+                out.push(*requirement_letter);
+                out.push_str("' second-to-last)\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+                render_yes_final(yes, &child_prefix, out);
+            }
         }
     }
 
@@ -588,6 +1187,78 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str("'? (all No contain '");
                 out.push(*requirement_letter);
                 out.push_str("')\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
+            Node::FirstLetterSplit { letter, yes, no } => {
+                // For a first letter split in the Yes position, continue the spine pattern
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str("First letter '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
+            Node::SoftFirstLetterSplit { test_letter, requirement_letter, yes, no } => {
+                // For a soft first letter split in the Yes position, continue the spine pattern
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str("First letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have '");
+                out.push(*requirement_letter);
+                out.push_str("' second)\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
+            Node::LastLetterSplit { letter, yes, no } => {
+                // For a last letter split in the Yes position, continue the spine pattern
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str("Last letter '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
+            Node::SoftLastLetterSplit { test_letter, requirement_letter, yes, no } => {
+                // For a soft last letter split in the Yes position, continue the spine pattern
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str("Last letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have '");
+                out.push(*requirement_letter);
+                out.push_str("' second-to-last)\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
 
@@ -655,6 +1326,78 @@ pub fn format_tree(node: &Node) -> String {
                 // Continue down the Yes spine
                 render_spine(yes, prefix, is_final, out);
             }
+            Node::FirstLetterSplit { letter, yes, no } => {
+                // Print the question for first letter split
+                out.push_str(prefix);
+                out.push_str("First letter '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                // No branch diverges sideways
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                // Spacer line for clarity between decision points
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                // Continue down the Yes spine
+                render_spine(yes, prefix, is_final, out);
+            }
+            Node::SoftFirstLetterSplit { test_letter, requirement_letter, yes, no } => {
+                // Print the question for soft first letter split
+                out.push_str(prefix);
+                out.push_str("First letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have '");
+                out.push(*requirement_letter);
+                out.push_str("' second)\n");
+
+                // No branch diverges sideways
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                // Spacer line for clarity between decision points
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                // Continue down the Yes spine
+                render_spine(yes, prefix, is_final, out);
+            }
+            Node::LastLetterSplit { letter, yes, no } => {
+                // Print the question for last letter split
+                out.push_str(prefix);
+                out.push_str("Last letter '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                // No branch diverges sideways
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                // Spacer line for clarity between decision points
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                // Continue down the Yes spine
+                render_spine(yes, prefix, is_final, out);
+            }
+            Node::SoftLastLetterSplit { test_letter, requirement_letter, yes, no } => {
+                // Print the question for soft last letter split
+                out.push_str(prefix);
+                out.push_str("Last letter '");
+                out.push(*test_letter);
+                out.push_str("'? (all No have '");
+                out.push(*requirement_letter);
+                out.push_str("' second-to-last)\n");
+
+                // No branch diverges sideways
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                // Spacer line for clarity between decision points
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                // Continue down the Yes spine
+                render_spine(yes, prefix, is_final, out);
+            }
         }
     }
 
@@ -684,10 +1427,9 @@ mod tests {
     fn simple_split_cost() {
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false);
-        // Tree: split on 'a', then yes branch splits on 'b'
-        // "ab": 0 nos, "ac": 1 no, "b": 1 no
-        // sum_nos = 0 + 1 + 1 = 2, sum_hard_nos = 0 + 1 + 1 = 2
-        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 2, depth: 2, word_count: 3 });
+        // With first/last letter splits, we can now use soft splits more effectively
+        // The new optimal tree uses a soft split, reducing sum_hard_nos from 2 to 1
+        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 1, depth: 2, word_count: 3 });
     }
 
     #[test]
@@ -697,9 +1439,9 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        // With soft no pairs and the new cost function (max_nos, max_hard_nos, sum_nos, sum_hard_nos, depth)
-        // The weighted sums provide better average-case optimization
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 12, sum_hard_nos: 9, depth: 5, word_count: 12 });
-        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 10, depth: 6, word_count: 12 });
+        // With soft no pairs, first/last letter splits (same letter in adjacent positions), and the new cost function
+        // The same-letter positional soft splits reduce sum_nos by finding efficient adjacency patterns
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 11, sum_hard_nos: 9, depth: 5, word_count: 12 });
+        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 9, depth: 6, word_count: 12 });
     }
 }
