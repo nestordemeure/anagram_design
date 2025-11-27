@@ -41,4 +41,5 @@ Includes regression tests and a Zodiac cost check for both settings.
 
 ## TODO
 
+* introduce sounds and not just letters?
 * introduce other soft nos to the set

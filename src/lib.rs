@@ -86,6 +86,30 @@ const SOFT_NO_PAIRS: &[SoftNoPair] = &[
     // E/I pair (pair_index = 0, uses bit 0 in forbidden bitmask)
     SoftNoPair { test_letter: 'e', requirement_letter: 'i', pair_index: 0 },
     SoftNoPair { test_letter: 'i', requirement_letter: 'e', pair_index: 0 },
+
+    // C/K pair (pair_index = 1) - identical hard sound
+    SoftNoPair { test_letter: 'c', requirement_letter: 'k', pair_index: 1 },
+    SoftNoPair { test_letter: 'k', requirement_letter: 'c', pair_index: 1 },
+
+    // S/Z pair (pair_index = 2) - similar sibilants
+    SoftNoPair { test_letter: 's', requirement_letter: 'z', pair_index: 2 },
+    SoftNoPair { test_letter: 'z', requirement_letter: 's', pair_index: 2 },
+
+    // I/L pair (pair_index = 3) - visually similar
+    SoftNoPair { test_letter: 'i', requirement_letter: 'l', pair_index: 3 },
+    SoftNoPair { test_letter: 'l', requirement_letter: 'i', pair_index: 3 },
+
+    // M/N pair (pair_index = 4) - nasals
+    SoftNoPair { test_letter: 'm', requirement_letter: 'n', pair_index: 4 },
+    SoftNoPair { test_letter: 'n', requirement_letter: 'm', pair_index: 4 },
+
+    // U/V pair (pair_index = 5) - visually similar
+    SoftNoPair { test_letter: 'u', requirement_letter: 'v', pair_index: 5 },
+    SoftNoPair { test_letter: 'v', requirement_letter: 'u', pair_index: 5 },
+
+    // O/Q pair (pair_index = 6) - visually similar
+    SoftNoPair { test_letter: 'o', requirement_letter: 'q', pair_index: 6 },
+    SoftNoPair { test_letter: 'q', requirement_letter: 'o', pair_index: 6 },
 ];
 
 fn mask_count(mask: u16) -> u32 {
@@ -627,8 +651,9 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        // With soft no nodes (I/E, E/I) and reciprocal prevention, we achieve (2, 1, 5)
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 5 });
+        // With soft no pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q) and reciprocal prevention
+        // I/L pair enables improvement to (2, 1, 4)
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 4 });
         assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 2, depth: 6 });
     }
 }
