@@ -59,20 +59,19 @@ pub struct Solution {
 struct Key {
     mask: u16,
     allow_repeat: bool,
-    /// Bitmask of forbidden soft no pairs (each pair gets one bit)
-    forbidden_soft_nos: u8,
+    /// Bitmask of forbidden letters (bit for each letter a-z used in ancestor soft nos)
+    forbidden_letters: u32,
 }
 
 /// Defines a soft no pair: (test_letter, requirement_letter)
 /// E/I means: test for 'e', require all No items contain 'i'
-/// Each pair implies its reciprocal
+/// Children cannot use any soft no containing either letter
 #[derive(Debug, Clone, Copy)]
 struct SoftNoPair {
-    /// First direction: test this letter, require the other in No items
+    /// Test for this letter
     test_letter: char,
+    /// Require all No items contain this letter
     requirement_letter: char,
-    /// Index in the forbidden bitmask (same for both directions)
-    pair_index: u8,
 }
 
 struct Context<'a> {
@@ -81,35 +80,47 @@ struct Context<'a> {
 }
 
 /// Define the available soft no pairs
-/// Each pair implies both directions, and children cannot use the reciprocal
+/// Children of a soft no cannot use any soft no containing either letter
 const SOFT_NO_PAIRS: &[SoftNoPair] = &[
-    // E/I pair (pair_index = 0, uses bit 0 in forbidden bitmask)
-    SoftNoPair { test_letter: 'e', requirement_letter: 'i', pair_index: 0 },
-    SoftNoPair { test_letter: 'i', requirement_letter: 'e', pair_index: 0 },
+    // E/I pair - vowel similarity
+    SoftNoPair { test_letter: 'e', requirement_letter: 'i' },
+    SoftNoPair { test_letter: 'i', requirement_letter: 'e' },
 
-    // C/K pair (pair_index = 1) - identical hard sound
-    SoftNoPair { test_letter: 'c', requirement_letter: 'k', pair_index: 1 },
-    SoftNoPair { test_letter: 'k', requirement_letter: 'c', pair_index: 1 },
+    // C/K pair - identical hard sound
+    SoftNoPair { test_letter: 'c', requirement_letter: 'k' },
+    SoftNoPair { test_letter: 'k', requirement_letter: 'c' },
 
-    // S/Z pair (pair_index = 2) - similar sibilants
-    SoftNoPair { test_letter: 's', requirement_letter: 'z', pair_index: 2 },
-    SoftNoPair { test_letter: 'z', requirement_letter: 's', pair_index: 2 },
+    // S/Z pair - similar sibilants
+    SoftNoPair { test_letter: 's', requirement_letter: 'z' },
+    SoftNoPair { test_letter: 'z', requirement_letter: 's' },
 
-    // I/L pair (pair_index = 3) - visually similar
-    SoftNoPair { test_letter: 'i', requirement_letter: 'l', pair_index: 3 },
-    SoftNoPair { test_letter: 'l', requirement_letter: 'i', pair_index: 3 },
+    // I/L pair - visually similar
+    SoftNoPair { test_letter: 'i', requirement_letter: 'l' },
+    SoftNoPair { test_letter: 'l', requirement_letter: 'i' },
 
-    // M/N pair (pair_index = 4) - nasals
-    SoftNoPair { test_letter: 'm', requirement_letter: 'n', pair_index: 4 },
-    SoftNoPair { test_letter: 'n', requirement_letter: 'm', pair_index: 4 },
+    // M/N pair - nasals
+    SoftNoPair { test_letter: 'm', requirement_letter: 'n' },
+    SoftNoPair { test_letter: 'n', requirement_letter: 'm' },
 
-    // U/V pair (pair_index = 5) - visually similar
-    SoftNoPair { test_letter: 'u', requirement_letter: 'v', pair_index: 5 },
-    SoftNoPair { test_letter: 'v', requirement_letter: 'u', pair_index: 5 },
+    // U/V pair - visually similar
+    SoftNoPair { test_letter: 'u', requirement_letter: 'v' },
+    SoftNoPair { test_letter: 'v', requirement_letter: 'u' },
 
-    // O/Q pair (pair_index = 6) - visually similar
-    SoftNoPair { test_letter: 'o', requirement_letter: 'q', pair_index: 6 },
-    SoftNoPair { test_letter: 'q', requirement_letter: 'o', pair_index: 6 },
+    // O/Q pair - visually similar
+    SoftNoPair { test_letter: 'o', requirement_letter: 'q' },
+    SoftNoPair { test_letter: 'q', requirement_letter: 'o' },
+
+    // C/G pair - visually similar
+    SoftNoPair { test_letter: 'c', requirement_letter: 'g' },
+    SoftNoPair { test_letter: 'g', requirement_letter: 'c' },
+
+    // B/P pair - voiced/unvoiced
+    SoftNoPair { test_letter: 'b', requirement_letter: 'p' },
+    SoftNoPair { test_letter: 'p', requirement_letter: 'b' },
+
+    // I/T pair - visually similar
+    SoftNoPair { test_letter: 'i', requirement_letter: 't' },
+    SoftNoPair { test_letter: 't', requirement_letter: 'i' },
 ];
 
 fn mask_count(mask: u16) -> u32 {
@@ -170,11 +181,11 @@ fn solve(
     mask: u16,
     ctx: &Context<'_>,
     allow_repeat: bool,
-    forbidden_soft_nos: u8,
+    forbidden_letters: u32,
     limit: Option<usize>,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
-    let key = Key { mask, allow_repeat, forbidden_soft_nos };
+    let key = Key { mask, allow_repeat, forbidden_letters };
     if let Some(hit) = memo.get(&key) {
         return hit.clone();
     }
@@ -213,8 +224,8 @@ fn solve(
             continue; // does not partition the set
         }
         let no = mask & !letter_mask;
-        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_soft_nos, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, forbidden_soft_nos, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_letters, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, forbidden_letters, limit, memo);
 
         // Adding this split increases depth on both sides; "nos" and "hard_nos" increment along No.
         // cost = (0,0,1) + max(yes, no + (1,1,0))
@@ -299,14 +310,15 @@ fn solve(
 
     // Soft split options from SOFT_NO_PAIRS
     for pair in SOFT_NO_PAIRS {
-        // Check if this pair is forbidden
-        let pair_bit = 1u8 << pair.pair_index;
-        if forbidden_soft_nos & pair_bit != 0 {
-            continue; // This pair is forbidden
-        }
-
         let test_idx = (pair.test_letter as u8 - b'a') as usize;
         let requirement_idx = (pair.requirement_letter as u8 - b'a') as usize;
+
+        // Check if either letter in this pair is forbidden
+        let test_bit = 1u32 << test_idx;
+        let requirement_bit = 1u32 << requirement_idx;
+        if forbidden_letters & (test_bit | requirement_bit) != 0 {
+            continue; // One or both letters in this pair are forbidden
+        }
 
         let yes = mask & ctx.letter_masks[test_idx];
         if yes == 0 || yes == mask {
@@ -319,8 +331,8 @@ fn solve(
             continue; // not all No items contain the requirement letter
         }
 
-        // Forbid this pair (both directions) in children
-        let child_forbidden = forbidden_soft_nos | pair_bit;
+        // Forbid both letters in children (any soft no containing either letter is now forbidden)
+        let child_forbidden = forbidden_letters | test_bit | requirement_bit;
         let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, limit, memo);
         let no_sol = solve(no, ctx, allow_repeat, child_forbidden, limit, memo);
 
@@ -651,9 +663,10 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        // With soft no pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q) and reciprocal prevention
-        // I/L pair enables improvement to (2, 1, 4)
+        // With soft no pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T) and reciprocal prevention
+        // I/L pair enables improvement to (2, 1, 4) for allow_repeat
+        // C/G and I/T pairs enable improvement to (2, 1, 6) for no_repeat (was 2, 2, 6)
         assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 4 });
-        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 2, depth: 6 });
+        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 6 });
     }
 }

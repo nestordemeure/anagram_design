@@ -41,5 +41,10 @@ Includes regression tests and a Zodiac cost check for both settings.
 
 ## TODO
 
-* introduce sounds and not just letters?
-* introduce other soft nos to the set
+* letterfirst type of questions (ie A first), and not just letter present
+  * same cost as normal letter present tests
+  * can add letter second soft conditions
+
+* soft no:
+  * introduce sounds and not just letters?
+  * introduces ones having to do with letter positions?
