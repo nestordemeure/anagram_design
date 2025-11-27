@@ -59,12 +59,34 @@ pub struct Solution {
 struct Key {
     mask: u16,
     allow_repeat: bool,
+    /// Bitmask of forbidden soft no pairs (each pair gets one bit)
+    forbidden_soft_nos: u8,
+}
+
+/// Defines a soft no pair: (test_letter, requirement_letter)
+/// E/I means: test for 'e', require all No items contain 'i'
+/// Each pair implies its reciprocal
+#[derive(Debug, Clone, Copy)]
+struct SoftNoPair {
+    /// First direction: test this letter, require the other in No items
+    test_letter: char,
+    requirement_letter: char,
+    /// Index in the forbidden bitmask (same for both directions)
+    pair_index: u8,
 }
 
 struct Context<'a> {
     words: &'a [String],
     letter_masks: [u16; 26],
 }
+
+/// Define the available soft no pairs
+/// Each pair implies both directions, and children cannot use the reciprocal
+const SOFT_NO_PAIRS: &[SoftNoPair] = &[
+    // E/I pair (pair_index = 0, uses bit 0 in forbidden bitmask)
+    SoftNoPair { test_letter: 'e', requirement_letter: 'i', pair_index: 0 },
+    SoftNoPair { test_letter: 'i', requirement_letter: 'e', pair_index: 0 },
+];
 
 fn mask_count(mask: u16) -> u32 {
     mask.count_ones()
@@ -124,10 +146,11 @@ fn solve(
     mask: u16,
     ctx: &Context<'_>,
     allow_repeat: bool,
+    forbidden_soft_nos: u8,
     limit: Option<usize>,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
-    let key = Key { mask, allow_repeat };
+    let key = Key { mask, allow_repeat, forbidden_soft_nos };
     if let Some(hit) = memo.get(&key) {
         return hit.clone();
     }
@@ -166,8 +189,8 @@ fn solve(
             continue; // does not partition the set
         }
         let no = mask & !letter_mask;
-        let yes_sol = solve(yes, ctx, allow_repeat, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, forbidden_soft_nos, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, forbidden_soft_nos, limit, memo);
 
         // Adding this split increases depth on both sides; "nos" and "hard_nos" increment along No.
         // cost = (0,0,1) + max(yes, no + (1,1,0))
@@ -250,15 +273,16 @@ fn solve(
         }
     }
 
-    // Soft split options: I/E and E/I
-    let soft_splits = [
-        ('i', 'e'), // I/E: test for 'i', require all No items contain 'e'
-        ('e', 'i'), // E/I: test for 'e', require all No items contain 'i'
-    ];
+    // Soft split options from SOFT_NO_PAIRS
+    for pair in SOFT_NO_PAIRS {
+        // Check if this pair is forbidden
+        let pair_bit = 1u8 << pair.pair_index;
+        if forbidden_soft_nos & pair_bit != 0 {
+            continue; // This pair is forbidden
+        }
 
-    for (test_letter, requirement_letter) in soft_splits {
-        let test_idx = (test_letter as u8 - b'a') as usize;
-        let requirement_idx = (requirement_letter as u8 - b'a') as usize;
+        let test_idx = (pair.test_letter as u8 - b'a') as usize;
+        let requirement_idx = (pair.requirement_letter as u8 - b'a') as usize;
 
         let yes = mask & ctx.letter_masks[test_idx];
         if yes == 0 || yes == mask {
@@ -271,8 +295,10 @@ fn solve(
             continue; // not all No items contain the requirement letter
         }
 
-        let yes_sol = solve(yes, ctx, allow_repeat, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, limit, memo);
+        // Forbid this pair (both directions) in children
+        let child_forbidden = forbidden_soft_nos | pair_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         // cost = (0,0,1) + max(yes, no + (1,0,0))
@@ -298,7 +324,7 @@ fn solve(
                         if !push_limited(
                             &mut best_trees,
                             limit,
-                            combine_soft_children(test_letter, requirement_letter, y, n),
+                            combine_soft_children(pair.test_letter, pair.requirement_letter, y, n),
                         ) {
                             exhausted = true;
                             break;
@@ -320,7 +346,7 @@ fn solve(
                             if !push_limited(
                                 &mut best_trees,
                                 limit,
-                                combine_soft_children(test_letter, requirement_letter, y, n),
+                                combine_soft_children(pair.test_letter, pair.requirement_letter, y, n),
                             ) {
                                 exhausted = true;
                                 break;
@@ -338,7 +364,7 @@ fn solve(
                             if !push_limited(
                                 &mut best_trees,
                                 limit,
-                                combine_soft_children(test_letter, requirement_letter, y, n),
+                                combine_soft_children(pair.test_letter, pair.requirement_letter, y, n),
                             ) {
                                 exhausted = true;
                                 break;
@@ -387,7 +413,7 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
     let ctx = Context { words, letter_masks };
     let mask = if words.len() == 16 { u16::MAX } else { (1u16 << words.len()) - 1 };
     let mut memo = HashMap::new();
-    solve(mask, &ctx, allow_repeat, limit, &mut memo)
+    solve(mask, &ctx, allow_repeat, 0, limit, &mut memo)
 }
 
 pub fn format_tree(node: &Node) -> String {
@@ -601,8 +627,8 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        // With soft no nodes (I/E, E/I), we can achieve (2, 1, 4) instead of (2, 2, 3)
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 4 });
+        // With soft no nodes (I/E, E/I) and reciprocal prevention, we achieve (2, 1, 5)
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 5 });
         assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 2, depth: 6 });
     }
 }

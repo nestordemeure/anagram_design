@@ -41,5 +41,4 @@ Includes regression tests and a Zodiac cost check for both settings.
 
 ## TODO
 
-* take reciprocal soft nos into account
 * introduce other soft nos to the set
