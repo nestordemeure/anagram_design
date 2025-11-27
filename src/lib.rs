@@ -216,6 +216,23 @@ fn single_word_from_mask(mask: u16, words: &[String]) -> Option<String> {
     }
 }
 
+/// Return all letter indices that produce a true partition of `mask` with the given per-letter masks.
+/// Each item is (letter_index, yes_mask, no_mask).
+fn partitions(mask: u16, masks: &[u16; 26]) -> Vec<(usize, u16, u16)> {
+    masks
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &letter_mask)| {
+            let yes = mask & letter_mask;
+            if yes == 0 || yes == mask {
+                None
+            } else {
+                Some((idx, yes, mask & !letter_mask))
+            }
+        })
+        .collect()
+}
+
 fn two_words_from_mask(mask: u16, words: &[String]) -> Option<(String, String)> {
     if mask_count(mask) != 2 {
         return None;
@@ -361,12 +378,7 @@ fn solve(
         }
     }
 
-    for (idx, letter_mask) in ctx.letter_masks.iter().enumerate() {
-        let yes = mask & letter_mask;
-        if yes == 0 || yes == mask {
-            continue; // does not partition the set
-        }
-        let no = mask & !letter_mask;
+    for (idx, yes, no) in partitions(mask, &ctx.letter_masks) {
         // In the YES branch, we know this letter exists in all words
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
@@ -580,13 +592,8 @@ fn solve(
     }
 
     // Soft double-letter splits: Yes has two of test_letter; No has two of a different uniform letter
-    for test_idx in 0..26 {
+    for (test_idx, yes, no) in partitions(mask, &ctx.double_letter_masks) {
         let test_bit = 1u32 << test_idx;
-        let yes = mask & ctx.double_letter_masks[test_idx];
-        if yes == 0 || yes == mask {
-            continue; // no partition or everyone has the double letter
-        }
-        let no = mask & !ctx.double_letter_masks[test_idx];
 
         // Determine if all "no" words share a different double letter
         let mut requirement_idx_opt: Option<usize> = None;
@@ -704,12 +711,7 @@ fn solve(
     }
 
     // First-letter hard splits
-    for (idx, letter_mask) in ctx.first_letter_masks.iter().enumerate() {
-        let yes = mask & letter_mask;
-        if yes == 0 || yes == mask {
-            continue; // does not partition the set
-        }
-        let no = mask & !letter_mask;
+    for (idx, yes, no) in partitions(mask, &ctx.first_letter_masks) {
         // In the YES branch, we know this letter exists in all words (as first letter)
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
@@ -806,13 +808,8 @@ fn solve(
     }
 
     // Soft first-letter splits: test first letter, require all No items have the same letter as second letter
-    for idx in 0..26 {
+    for (idx, yes, no) in partitions(mask, &ctx.first_letter_masks) {
         let letter_bit = 1u32 << idx;
-        let yes = mask & ctx.first_letter_masks[idx];
-        if yes == 0 || yes == mask {
-            continue; // does not partition the set
-        }
-        let no = mask & !ctx.first_letter_masks[idx];
 
         // Check if all items in the "no" set have the same letter as second letter
         if no & ctx.second_letter_masks[idx] != no {
@@ -1134,12 +1131,7 @@ fn solve(
     }
 
     // Last-letter hard splits
-    for (idx, letter_mask) in ctx.last_letter_masks.iter().enumerate() {
-        let yes = mask & letter_mask;
-        if yes == 0 || yes == mask {
-            continue; // does not partition the set
-        }
-        let no = mask & !letter_mask;
+    for (idx, yes, no) in partitions(mask, &ctx.last_letter_masks) {
         // In the YES branch, we know this letter exists in all words (as last letter)
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
@@ -1236,14 +1228,8 @@ fn solve(
     }
 
     // Soft last-letter splits: test last letter, require all No items have the same letter as second-to-last letter
-    for idx in 0..26 {
+    for (idx, yes, no) in partitions(mask, &ctx.last_letter_masks) {
         let letter_bit = 1u32 << idx;
-
-        let yes = mask & ctx.last_letter_masks[idx];
-        if yes == 0 || yes == mask {
-            continue; // does not partition the set
-        }
-        let no = mask & !ctx.last_letter_masks[idx];
 
         // Check if all items in the "no" set have the same letter as second-to-last letter
         if no & ctx.second_to_last_letter_masks[idx] != no {
