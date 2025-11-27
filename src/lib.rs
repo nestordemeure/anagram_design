@@ -5,19 +5,14 @@ use std::collections::HashMap;
 pub struct Cost {
     /// Number of No-edges on the heaviest path (primary objective).
     pub nos: u32,
-    /// Number of Repeat nodes on that path (secondary objective).
-    pub repeats: u32,
-    /// Total depth (edges) on that path (tertiary tie-breaker).
+    /// Total depth (edges) on that path (secondary tie-breaker).
     pub depth: u32,
 }
 
 impl Ord for Cost {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.nos.cmp(&other.nos) {
-            Ordering::Equal => match self.repeats.cmp(&other.repeats) {
-                Ordering::Equal => self.depth.cmp(&other.depth),
-                ord => ord,
-            },
+            Ordering::Equal => self.depth.cmp(&other.depth),
             ord => ord,
         }
     }
@@ -121,7 +116,7 @@ fn solve(
     if count == 1 {
         let word = single_word_from_mask(mask, ctx.words).expect("mask must map to a word");
         let sol = Solution {
-            cost: Cost { nos: 0, repeats: 0, depth: 0 },
+            cost: Cost { nos: 0, depth: 0 },
             trees: vec![Node::Leaf(word)],
             exhausted: false,
         };
@@ -136,7 +131,7 @@ fn solve(
     // Repeat node option for exactly two words
     if allow_repeat && count == 2 {
         if let Some((w1, w2)) = two_words_from_mask(mask, ctx.words) {
-            best_cost = Some(Cost { nos: 0, repeats: 1, depth: 0 });
+            best_cost = Some(Cost { nos: 0, depth: 0 });
             if !push_limited(&mut best_trees, limit, Node::Repeat(w1, w2)) {
                 exhausted = true;
             }
@@ -153,18 +148,16 @@ fn solve(
         let no_sol = solve(no, ctx, allow_repeat, limit, memo);
 
         // Adding this split increases depth on both sides; "nos" only increments along No.
-        // cost = (0,0,1) + max(yes, no + (1,0,0))
+        // cost = (0,1) + max(yes, no + (1,0))
         let yes_cost = yes_sol.cost;
         let no_cost = Cost {
             nos: no_sol.cost.nos + 1,
-            repeats: no_sol.cost.repeats,
             depth: no_sol.cost.depth,
         };
         let dominant = std::cmp::max(yes_cost, no_cost);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1; // true tree height
         let branch_cost = Cost {
             nos: dominant.nos,
-            repeats: dominant.repeats,
             depth: branch_depth,
         };
 
@@ -415,7 +408,7 @@ mod tests {
     fn simple_split_cost() {
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false);
-        assert_eq!(sol.cost, Cost { nos: 1, repeats: 0, depth: 2 });
+        assert_eq!(sol.cost, Cost { nos: 1, depth: 2 });
     }
 
     #[test]
@@ -425,7 +418,7 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, repeats: 0, depth: 5 });
-        assert_eq!(no_repeat.cost, Cost { nos: 2, repeats: 0, depth: 6 });
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, depth: 3 });
+        assert_eq!(no_repeat.cost, Cost { nos: 2, depth: 6 });
     }
 }

@@ -28,3 +28,8 @@ ENV/
 # Rust
 /target
 Cargo.lock
+
+# IDE / Agents
+.claude
+AGENTS.md
+CLAUDE.md

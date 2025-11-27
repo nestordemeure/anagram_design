@@ -15,10 +15,9 @@ fn print_solutions(allow_repeat: bool) {
     let result = minimal_trees_limited(&words, allow_repeat, Some(DISPLAY));
     let preview = DISPLAY.min(result.trees.len());
     println!(
-        "Allow repeat: {} | Best cost = (nos {}, repeat {}, depth {}) | {} tree(s)",
+        "Allow repeat: {} | Best cost = (max no {}, depth {}) | {} tree(s)",
         allow_repeat,
         result.cost.nos,
-        result.cost.repeats,
         result.cost.depth,
         result.trees.len()
     );
