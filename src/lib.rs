@@ -84,6 +84,14 @@ pub enum Node {
         yes: Box<Node>,
         no: Box<Node>,
     },
+    SoftDoubleLetterSplit {
+        /// Letter that must appear twice in the Yes branch
+        test_letter: char,
+        /// Letter (different) that must appear twice in all No items
+        requirement_letter: char,
+        yes: Box<Node>,
+        no: Box<Node>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -121,6 +129,7 @@ struct Context<'a> {
     second_letter_masks: [u16; 26],
     last_letter_masks: [u16; 26],
     second_to_last_letter_masks: [u16; 26],
+    double_letter_masks: [u16; 26],
 }
 
 /// Define the available soft no pairs
@@ -242,6 +251,15 @@ fn combine_last_letter_children(letter: char, left: &Node, right: &Node) -> Node
 
 fn combine_soft_last_letter_children(test_letter: char, requirement_letter: char, left: &Node, right: &Node) -> Node {
     Node::SoftLastLetterSplit {
+        test_letter,
+        requirement_letter,
+        yes: Box::new(left.clone()),
+        no: Box::new(right.clone()),
+    }
+}
+
+fn combine_soft_double_letter_children(test_letter: char, requirement_letter: char, left: &Node, right: &Node) -> Node {
+    Node::SoftDoubleLetterSplit {
         test_letter,
         requirement_letter,
         yes: Box::new(left.clone()),
@@ -516,6 +534,139 @@ fn solve(
                                 &mut best_trees,
                                 limit,
                                 combine_soft_children(pair.test_letter, pair.requirement_letter, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Greater => {}
+            },
+        }
+    }
+
+    // Soft double-letter splits: Yes has two of test_letter; No has two of a different uniform letter
+    for test_idx in 0..26 {
+        let test_bit = 1u32 << test_idx;
+        if forbidden_letters & test_bit != 0 {
+            continue;
+        }
+
+        let yes = mask & ctx.double_letter_masks[test_idx];
+        if yes == 0 || yes == mask {
+            continue; // no partition or everyone has the double letter
+        }
+        let no = mask & !ctx.double_letter_masks[test_idx];
+
+        // Determine if all "no" words share a different double letter
+        let mut requirement_idx_opt: Option<usize> = None;
+        for idx in 0..26 {
+            if idx == test_idx {
+                continue;
+            }
+            let candidate = ctx.double_letter_masks[idx];
+            if candidate & no == no {
+                requirement_idx_opt = Some(idx);
+                break;
+            }
+        }
+        let requirement_idx = match requirement_idx_opt {
+            Some(i) => i,
+            None => continue, // no uniform double letter in no-branch
+        };
+
+        let requirement_bit = 1u32 << requirement_idx;
+        if forbidden_letters & requirement_bit != 0 {
+            continue;
+        }
+
+        // Forbid both letters in children
+        let child_forbidden = forbidden_letters | test_bit | requirement_bit;
+        let yes_known = known_letters | test_bit;
+        let no_known = known_letters | requirement_bit;
+        let yes_sol = solve(yes, ctx, allow_repeat, child_forbidden, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, child_forbidden, no_known, limit, memo);
+
+        // Soft edge: increment nos, not hard_nos
+        let yes_cost = yes_sol.cost;
+        let no_cost = Cost {
+            nos: no_sol.cost.nos + 1,
+            hard_nos: no_sol.cost.hard_nos,
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
+            depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
+        };
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
+        let branch_cost = Cost {
+            nos,
+            hard_nos,
+            sum_nos: total_sum_nos,
+            sum_hard_nos: total_sum_hard_nos,
+            depth: branch_depth,
+            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+        };
+
+        let test_letter = (b'a' + test_idx as u8) as char;
+        let requirement_letter = (b'a' + requirement_idx as u8) as char;
+        match best_cost {
+            None => {
+                best_cost = Some(branch_cost);
+                for y in &yes_sol.trees {
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            &mut best_trees,
+                            limit,
+                            combine_soft_double_letter_children(test_letter, requirement_letter, y, n),
+                        ) {
+                            exhausted = true;
+                            break;
+                        }
+                    }
+                    if exhausted {
+                        break;
+                    }
+                }
+                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+            }
+            Some(current) => match branch_cost.cmp(&current) {
+                Ordering::Less => {
+                    best_trees.clear();
+                    best_cost = Some(branch_cost);
+                    exhausted = false;
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_double_letter_children(test_letter, requirement_letter, y, n),
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        if exhausted {
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
+                }
+                Ordering::Equal => {
+                    for y in &yes_sol.trees {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                combine_soft_double_letter_children(test_letter, requirement_letter, y, n),
                             ) {
                                 exhausted = true;
                                 break;
@@ -1056,6 +1207,27 @@ fn make_second_to_last_letter_masks(words: &[String]) -> [u16; 26] {
     masks
 }
 
+fn make_double_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        let mut counts = [0u8; 26];
+        for ch in w.chars() {
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                if counts[l] < 2 {
+                    counts[l] += 1;
+                }
+            }
+        }
+        for (l, &c) in counts.iter().enumerate() {
+            if c >= 2 {
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
 pub fn minimal_trees(words: &[String], allow_repeat: bool) -> Solution {
     // Default to keeping at most 5 optimal trees, matching the CLI display cap.
     minimal_trees_limited(words, allow_repeat, Some(5))
@@ -1068,6 +1240,7 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
     let second_letter_masks = make_second_letter_masks(words);
     let last_letter_masks = make_last_letter_masks(words);
     let second_to_last_letter_masks = make_second_to_last_letter_masks(words);
+    let double_letter_masks = make_double_letter_masks(words);
     let ctx = Context {
         words,
         letter_masks,
@@ -1075,6 +1248,7 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
         second_letter_masks,
         last_letter_masks,
         second_to_last_letter_masks,
+        double_letter_masks,
     };
     let mask = if words.len() == 16 { u16::MAX } else { (1u16 << words.len()) - 1 };
     let mut memo = HashMap::new();
@@ -1181,6 +1355,18 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str("'? (all No have '");
                 out.push(*requirement_letter);
                 out.push_str("' second-to-last)\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+                render_yes_final(yes, &child_prefix, out);
+            }
+            Node::SoftDoubleLetterSplit { test_letter, requirement_letter, yes, no } => {
+                out.push_str(prefix);
+                out.push_str("└─ No: Double '");
+                out.push(*test_letter);
+                out.push_str("'? (all No double '");
+                out.push(*requirement_letter);
+                out.push_str("')\n");
 
                 let child_prefix = format!("{}   ", prefix);
                 render_no_branch(no, &format!("{}│", child_prefix), out);
@@ -1306,6 +1492,24 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str("'? (all No have '");
                 out.push(*requirement_letter);
                 out.push_str("' second-to-last)\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
+            Node::SoftDoubleLetterSplit { test_letter, requirement_letter, yes, no } => {
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str("Double '");
+                out.push(*test_letter);
+                out.push_str("'? (all No double '");
+                out.push(*requirement_letter);
+                out.push_str("')\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
 
@@ -1445,6 +1649,21 @@ pub fn format_tree(node: &Node) -> String {
                 // Continue down the Yes spine
                 render_spine(yes, prefix, is_final, out);
             }
+            Node::SoftDoubleLetterSplit { test_letter, requirement_letter, yes, no } => {
+                out.push_str(prefix);
+                out.push_str("Double '");
+                out.push(*test_letter);
+                out.push_str("'? (all No double '");
+                out.push(*requirement_letter);
+                out.push_str("')\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_spine(yes, prefix, is_final, out);
+            }
         }
     }
 
@@ -1495,7 +1714,8 @@ mod tests {
             }
             Node::SoftSplit { yes, no, .. }
             | Node::SoftFirstLetterSplit { yes, no, .. }
-            | Node::SoftLastLetterSplit { yes, no, .. } => {
+            | Node::SoftLastLetterSplit { yes, no, .. }
+            | Node::SoftDoubleLetterSplit { yes, no, .. } => {
                 let yes_cost = compute_cost(yes);
                 let no_cost_base = compute_cost(no);
                 let no_cost = Cost {
@@ -1554,7 +1774,7 @@ mod tests {
         //   2. "Contains 'c'? (all No contain 'g')" - soft (Scorpio has c, Virgo has g)
         // This achieves hard_nos: 0!
         assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 11, sum_hard_nos: 7, depth: 5, word_count: 12 });
-        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 10, depth: 6, word_count: 12 });
+        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 7, depth: 6, word_count: 12 });
     }
 
     #[test]
@@ -1601,6 +1821,29 @@ mod tests {
                 sol.cost,
                 tree_cost
             );
+        }
+    }
+
+    #[test]
+    fn soft_double_letter_split_works() {
+        // Yes: words with double 'o'; No: words with double 'l'
+        let data = words(&["book", "pool", "ball", "tall"]);
+        let sol = minimal_trees_limited(&data, true, Some(1));
+        assert_eq!(
+            sol.cost,
+            Cost { nos: 1, hard_nos: 0, sum_nos: 2, sum_hard_nos: 0, depth: 1, word_count: 4 }
+        );
+        match &sol.trees[0] {
+            Node::SoftDoubleLetterSplit { test_letter, requirement_letter, yes, no } => {
+                let pair = (*test_letter, *requirement_letter);
+                assert!(
+                    pair == ('o', 'l') || pair == ('l', 'o'),
+                    "expected letters o/l in some order, got {pair:?}"
+                );
+                assert!(matches!(**yes, Node::Repeat(_, _)));
+                assert!(matches!(**no, Node::Repeat(_, _)));
+            }
+            other => panic!("expected SoftDoubleLetterSplit root, got {other:?}"),
         }
     }
 }

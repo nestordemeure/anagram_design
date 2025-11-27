@@ -13,6 +13,7 @@ Nodes are yes/no questions that partition the word set:
 - **Soft splits**
   - Contains soft: `Contains 'i'? (all No contain 'e')` for defined pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E).
   - Positional soft: `First letter 'a'? (all No have 'a' second)` and `Last letter 's'? (all No have 's' second-to-last)`.
+  - Double-letter soft: `Double 'o'? (all No double 'l')` — Yes branch has two of the test letter; No branch has two of a different uniform letter.
   - A No edge adds 1 to `nos` only.
 - **Leaves / Repeat** (only when exactly two words): cost `(0,0,0,0,0)`.
 
@@ -43,6 +44,7 @@ Includes regression tests and a Zodiac cost check for both settings.
 
 ## TODO
 
+* should hard no be the first criteria in our cost function?
+
 * soft no:
   * introduce sounds and not just letters?
-  * a given double letter (with all nos ahving a the same, different, double letter in common)
