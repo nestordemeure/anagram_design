@@ -7,15 +7,27 @@ pub struct Cost {
     pub nos: u32,
     /// Number of hard No-edges on the heaviest path (secondary objective).
     pub hard_nos: u32,
-    /// Total depth (edges) on that path (tertiary tie-breaker).
+    /// Sum of No-edges weighted by word count (tertiary objective).
+    pub sum_nos: u32,
+    /// Sum of hard No-edges weighted by word count (quaternary objective).
+    pub sum_hard_nos: u32,
+    /// Total depth (edges) on that path (quinary tie-breaker).
     pub depth: u32,
+    /// Number of words in this subtree.
+    pub word_count: u32,
 }
 
 impl Ord for Cost {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.nos.cmp(&other.nos) {
             Ordering::Equal => match self.hard_nos.cmp(&other.hard_nos) {
-                Ordering::Equal => self.depth.cmp(&other.depth),
+                Ordering::Equal => match self.sum_nos.cmp(&other.sum_nos) {
+                    Ordering::Equal => match self.sum_hard_nos.cmp(&other.sum_hard_nos) {
+                        Ordering::Equal => self.depth.cmp(&other.depth),
+                        ord => ord,
+                    },
+                    ord => ord,
+                },
                 ord => ord,
             },
             ord => ord,
@@ -196,7 +208,7 @@ fn solve(
     if count == 1 {
         let word = single_word_from_mask(mask, ctx.words).expect("mask must map to a word");
         let sol = Solution {
-            cost: Cost { nos: 0, hard_nos: 0, depth: 0 },
+            cost: Cost { nos: 0, hard_nos: 0, sum_nos: 0, sum_hard_nos: 0, depth: 0, word_count: 1 },
             trees: vec![Node::Leaf(word)],
             exhausted: false,
         };
@@ -211,7 +223,7 @@ fn solve(
     // Repeat node option for exactly two words
     if allow_repeat && count == 2 {
         if let Some((w1, w2)) = two_words_from_mask(mask, ctx.words) {
-            best_cost = Some(Cost { nos: 0, hard_nos: 0, depth: 0 });
+            best_cost = Some(Cost { nos: 0, hard_nos: 0, sum_nos: 0, sum_hard_nos: 0, depth: 0, word_count: 2 });
             if !push_limited(&mut best_trees, limit, Node::Repeat(w1, w2)) {
                 exhausted = true;
             }
@@ -233,14 +245,23 @@ fn solve(
         let no_cost = Cost {
             nos: no_sol.cost.nos + 1,
             hard_nos: no_sol.cost.hard_nos + 1,
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
             depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
         };
         let dominant = std::cmp::max(yes_cost, no_cost);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1; // true tree height
+        // Calculate weighted sums: words in no branch encounter 1 additional hard no edge
+        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
         let branch_cost = Cost {
             nos: dominant.nos,
             hard_nos: dominant.hard_nos,
+            sum_nos: total_sum_nos,
+            sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
+            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
         };
 
         match best_cost {
@@ -342,14 +363,24 @@ fn solve(
         let no_cost = Cost {
             nos: no_sol.cost.nos + 1,
             hard_nos: no_sol.cost.hard_nos, // soft no does not increment hard_nos
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
             depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
         };
         let dominant = std::cmp::max(yes_cost, no_cost);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+        // Calculate weighted sums: words in no branch encounter 1 additional soft no edge
+        // (increments sum_nos but not sum_hard_nos)
+        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos; // no increment for soft no
         let branch_cost = Cost {
             nos: dominant.nos,
             hard_nos: dominant.hard_nos,
+            sum_nos: total_sum_nos,
+            sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
+            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
         };
 
         match best_cost {
@@ -653,7 +684,10 @@ mod tests {
     fn simple_split_cost() {
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false);
-        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, depth: 2 });
+        // Tree: split on 'a', then yes branch splits on 'b'
+        // "ab": 0 nos, "ac": 1 no, "b": 1 no
+        // sum_nos = 0 + 1 + 1 = 2, sum_hard_nos = 0 + 1 + 1 = 2
+        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 2, depth: 2, word_count: 3 });
     }
 
     #[test]
@@ -663,10 +697,9 @@ mod tests {
         ]);
         let allow_repeat = minimal_trees_limited(&data, true, Some(1));
         let no_repeat = minimal_trees_limited(&data, false, Some(1));
-        // With soft no pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T) and reciprocal prevention
-        // I/L pair enables improvement to (2, 1, 4) for allow_repeat
-        // C/G and I/T pairs enable improvement to (2, 1, 6) for no_repeat (was 2, 2, 6)
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 4 });
-        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, depth: 6 });
+        // With soft no pairs and the new cost function (max_nos, max_hard_nos, sum_nos, sum_hard_nos, depth)
+        // The weighted sums provide better average-case optimization
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 12, sum_hard_nos: 9, depth: 5, word_count: 12 });
+        assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 10, depth: 6, word_count: 12 });
     }
 }

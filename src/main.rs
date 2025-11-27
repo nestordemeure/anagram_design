@@ -15,10 +15,12 @@ fn print_solutions(allow_repeat: bool) {
     let result = minimal_trees_limited(&words, allow_repeat, Some(DISPLAY));
     let preview = DISPLAY.min(result.trees.len());
     println!(
-        "Allow repeat: {} | Best cost = (max no {}, hard no {}, depth {}) | {} tree(s)",
+        "Allow repeat: {} | Best cost = (max no {}, max hard no {}, sum no {}, sum hard no {}, depth {}) | {} tree(s)",
         allow_repeat,
         result.cost.nos,
         result.cost.hard_nos,
+        result.cost.sum_nos,
+        result.cost.sum_hard_nos,
         result.cost.depth,
         result.trees.len()
     );
