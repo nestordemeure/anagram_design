@@ -17,6 +17,34 @@ pub struct Cost {
     pub word_count: u32,
 }
 
+fn compare_costs(a: &Cost, b: &Cost, prioritize_soft_no: bool) -> Ordering {
+    if prioritize_soft_no {
+        return a
+            .hard_nos
+            .cmp(&b.hard_nos)
+            .then_with(|| a.nos.cmp(&b.nos))
+            .then_with(|| a.sum_hard_nos.cmp(&b.sum_hard_nos))
+            .then_with(|| a.sum_nos.cmp(&b.sum_nos))
+            .then_with(|| a.depth.cmp(&b.depth));
+    }
+
+    // Average-based ordering: (max no, max hard no, avg no, avg hard no, depth)
+    a.nos
+        .cmp(&b.nos)
+        .then_with(|| a.hard_nos.cmp(&b.hard_nos))
+        .then_with(|| {
+            let left = (a.sum_nos as u64) * (b.word_count as u64);
+            let right = (b.sum_nos as u64) * (a.word_count as u64);
+            left.cmp(&right)
+        })
+        .then_with(|| {
+            let left = (a.sum_hard_nos as u64) * (b.word_count as u64);
+            let right = (b.sum_hard_nos as u64) * (a.word_count as u64);
+            left.cmp(&right)
+        })
+        .then_with(|| a.depth.cmp(&b.depth))
+}
+
 impl Ord for Cost {
     fn cmp(&self, other: &Self) -> Ordering {
         self.hard_nos
@@ -112,6 +140,7 @@ pub struct Solution {
 struct Key {
     mask: u16,
     allow_repeat: bool,
+    prioritize_soft_no: bool,
     /// Bitmask of known letters (letters we know exist in all words in this branch)
     known_letters: u32,
 }
@@ -341,11 +370,12 @@ fn solve(
     mask: u16,
     ctx: &Context<'_>,
     allow_repeat: bool,
+    prioritize_soft_no: bool,
     known_letters: u32,
     limit: Option<usize>,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
-    let key = Key { mask, allow_repeat, known_letters };
+    let key = Key { mask, allow_repeat, prioritize_soft_no, known_letters };
     if let Some(hit) = memo.get(&key) {
         return hit.clone();
     }
@@ -382,8 +412,8 @@ fn solve(
         // In the YES branch, we know this letter exists in all words
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, known_letters, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, known_letters, limit, memo);
 
         // Adding this split increases depth on both sides; the No branch increments both hard_nos and nos.
         let yes_cost = yes_sol.cost;
@@ -430,7 +460,7 @@ fn solve(
                 }
                 exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
-            Some(current) => match branch_cost.cmp(&current) {
+            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
@@ -497,8 +527,8 @@ fn solve(
         // In the YES branch, we know the test_letter exists; in the NO branch, we know the requirement_letter exists
         let yes_known = known_letters | test_bit;
         let no_known = known_letters | requirement_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, no_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, no_known, limit, memo);
 
         // Soft split: No branch increments nos but leaves hard_nos unchanged.
         let yes_cost = yes_sol.cost;
@@ -546,7 +576,7 @@ fn solve(
                 }
                 exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
-            Some(current) => match branch_cost.cmp(&current) {
+            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
@@ -616,8 +646,8 @@ fn solve(
 
         let yes_known = known_letters | test_bit;
         let no_known = known_letters | requirement_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, no_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, no_known, limit, memo);
 
         // Soft edge: increment nos, not hard_nos
         let yes_cost = yes_sol.cost;
@@ -665,7 +695,7 @@ fn solve(
                 }
                 exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
-            Some(current) => match branch_cost.cmp(&current) {
+            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
@@ -715,8 +745,8 @@ fn solve(
         // In the YES branch, we know this letter exists in all words (as first letter)
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, known_letters, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, known_letters, limit, memo);
 
         // Hard split on first letter: same cost structure as regular hard split
         let yes_cost = yes_sol.cost;
@@ -762,7 +792,7 @@ fn solve(
                 }
                 exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
-            Some(current) => match branch_cost.cmp(&current) {
+            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
@@ -819,8 +849,8 @@ fn solve(
         // In YES branch, we know letter is first; in NO branch, we know letter is second
         // Either way, the letter exists in all words
         let child_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         let yes_cost = yes_sol.cost;
@@ -867,7 +897,7 @@ fn solve(
                 }
                 exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
-            Some(current) => match branch_cost.cmp(&current) {
+            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
@@ -928,8 +958,8 @@ fn solve(
             }
 
             let child_known = known_letters | letter_bit;
-            let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
-            let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
+            let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
+            let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
 
             let yes_cost = yes_sol.cost;
             let no_cost = Cost {
@@ -975,7 +1005,7 @@ fn solve(
                     }
                     exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
                 }
-                Some(current) => match branch_cost.cmp(&current) {
+                Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                     Ordering::Less => {
                         best_trees.clear();
                         best_cost = Some(branch_cost);
@@ -1037,8 +1067,8 @@ fn solve(
             }
 
             let child_known = known_letters | letter_bit;
-            let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
-            let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
+            let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
+            let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
 
             let yes_cost = yes_sol.cost;
             let no_cost = Cost {
@@ -1084,7 +1114,7 @@ fn solve(
                     }
                     exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
                 }
-                Some(current) => match branch_cost.cmp(&current) {
+                Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                     Ordering::Less => {
                         best_trees.clear();
                         best_cost = Some(branch_cost);
@@ -1135,8 +1165,8 @@ fn solve(
         // In the YES branch, we know this letter exists in all words (as last letter)
         let letter_bit = 1u32 << idx;
         let yes_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, yes_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, known_letters, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, known_letters, limit, memo);
 
         // Hard split on last letter: same cost structure as regular hard split
         let yes_cost = yes_sol.cost;
@@ -1182,7 +1212,7 @@ fn solve(
                 }
                 exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
-            Some(current) => match branch_cost.cmp(&current) {
+            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
@@ -1239,8 +1269,8 @@ fn solve(
         // In YES branch, we know letter is last; in NO branch, we know letter is second-to-last
         // Either way, the letter exists in all words
         let child_known = known_letters | letter_bit;
-        let yes_sol = solve(yes, ctx, allow_repeat, child_known, limit, memo);
-        let no_sol = solve(no, ctx, allow_repeat, child_known, limit, memo);
+        let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
+        let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, child_known, limit, memo);
 
         // Soft split: nos increments, but hard_nos does not
         let yes_cost = yes_sol.cost;
@@ -1287,7 +1317,7 @@ fn solve(
                 }
                 exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
-            Some(current) => match branch_cost.cmp(&current) {
+            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
@@ -1457,12 +1487,12 @@ fn make_double_letter_masks(words: &[String]) -> [u16; 26] {
     masks
 }
 
-pub fn minimal_trees(words: &[String], allow_repeat: bool) -> Solution {
+pub fn minimal_trees(words: &[String], allow_repeat: bool, prioritize_soft_no: bool) -> Solution {
     // Default to keeping at most 5 optimal trees, matching the CLI display cap.
-    minimal_trees_limited(words, allow_repeat, Some(5))
+    minimal_trees_limited(words, allow_repeat, prioritize_soft_no, Some(5))
 }
 
-pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option<usize>) -> Solution {
+pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, prioritize_soft_no: bool, limit: Option<usize>) -> Solution {
     assert!(words.len() <= 16, "bitmask solver supports up to 16 words");
     let letter_masks = make_letter_masks(words);
     let first_letter_masks = make_first_letter_masks(words);
@@ -1485,7 +1515,7 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
     };
     let mask = if words.len() == 16 { u16::MAX } else { (1u16 << words.len()) - 1 };
     let mut memo = HashMap::new();
-    solve(mask, &ctx, allow_repeat, 0, limit, &mut memo)
+    solve(mask, &ctx, allow_repeat, prioritize_soft_no, 0, limit, &mut memo)
 }
 
 pub fn format_tree(node: &Node) -> String {
@@ -1974,6 +2004,31 @@ mod tests {
         list.iter().map(|s| s.to_string()).collect()
     }
 
+    #[test]
+    fn compare_costs_prioritization_flips() {
+        use std::cmp::Ordering;
+
+        let soft_first = Cost {
+            hard_nos: 0,
+            nos: 2,
+            sum_hard_nos: 0,
+            sum_nos: 4,
+            depth: 2,
+            word_count: 4,
+        };
+        let hard_first = Cost {
+            hard_nos: 1,
+            nos: 1,
+            sum_hard_nos: 1,
+            sum_nos: 2,
+            depth: 3,
+            word_count: 4,
+        };
+
+        assert_eq!(compare_costs(&soft_first, &hard_first, true), Ordering::Less);
+        assert_eq!(compare_costs(&soft_first, &hard_first, false), Ordering::Greater);
+    }
+
     /// Recompute the full Cost of a tree by walking it, independent of the solver.
     fn compute_cost(node: &Node) -> Cost {
         match node {
@@ -2041,8 +2096,8 @@ mod tests {
     #[test]
     fn repeat_beats_depth_for_two_words() {
         let data = words(&["alpha", "beta"]);
-        let with_repeat = minimal_trees(&data, true);
-        let without_repeat = minimal_trees(&data, false);
+        let with_repeat = minimal_trees(&data, true, true);
+        let without_repeat = minimal_trees(&data, false, true);
         assert!(with_repeat.cost < without_repeat.cost);
         assert!(matches!(with_repeat.trees[0], Node::Repeat(_, _)));
     }
@@ -2050,7 +2105,7 @@ mod tests {
     #[test]
     fn simple_split_cost() {
         let data = words(&["ab", "ac", "b"]);
-        let sol = minimal_trees(&data, false);
+        let sol = minimal_trees(&data, false, true);
         assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 1, depth: 2, word_count: 3 });
     }
 
@@ -2059,8 +2114,8 @@ mod tests {
         let data = words(&[
             "aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
         ]);
-        let allow_repeat = minimal_trees_limited(&data, true, Some(1));
-        let no_repeat = minimal_trees_limited(&data, false, Some(1));
+        let allow_repeat = minimal_trees_limited(&data, true, true, Some(1));
+        let no_repeat = minimal_trees_limited(&data, false, true, Some(1));
         // Regression test: R/E pair + C/G pair enable all-soft-test trees
         // With R/E and C/G soft pairs, Virgo/Scorpio can be separated by:
         //   1. "Contains 'r'? (all No contain 'e')" - soft
@@ -2078,7 +2133,7 @@ mod tests {
         //   scorpio: has {s,c,o,r,p,i} - has 'r' and 'c', no 'g'
         //   gemini: has {g,e,m,i,n} - has 'e' and 'g', no 'r' or 'c'
         let data = words(&["virgo", "scorpio", "gemini"]);
-        let sol = minimal_trees(&data, true);
+        let sol = minimal_trees(&data, true, true);
         // Should achieve hard_nos: 0 using: r/e soft, then c/g soft
         assert_eq!(sol.cost.hard_nos, 0, "Expected 0 hard NOs (all soft), got {}", sol.cost.hard_nos);
     }
@@ -2090,7 +2145,7 @@ mod tests {
         //   2) In the Yes branch, Contains 't'? (all No contain 'r')
         // Current solver skips step (2) because 'r' is already known, so it returns hard_nos = 1.
         let data = words(&["tr", "r", "e"]);
-        let sol = minimal_trees(&data, false);
+        let sol = minimal_trees(&data, false, true);
         assert_eq!(
             sol.cost,
             Cost { hard_nos: 0, nos: 1, sum_hard_nos: 0, sum_nos: 2, depth: 2, word_count: 3 },
@@ -2105,7 +2160,7 @@ mod tests {
         let data = words(&[
             "aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
         ]);
-        let sol = minimal_trees_limited(&data, true, Some(1));
+        let sol = minimal_trees_limited(&data, true, true, Some(1));
         let tree = &sol.trees[0];
         let cost = compute_cost(tree);
         assert_eq!(cost, Cost { nos: 3, hard_nos: 0, sum_nos: 16, sum_hard_nos: 0, depth: 5, word_count: 12 });
@@ -2116,7 +2171,7 @@ mod tests {
         let data = words(&[
             "aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
         ]);
-        let sol = minimal_trees_limited(&data, true, Some(3));
+        let sol = minimal_trees_limited(&data, true, true, Some(3));
         for (idx, tree) in sol.trees.iter().take(3).enumerate() {
             let tree_cost = compute_cost(tree);
             assert_eq!(
@@ -2133,7 +2188,7 @@ mod tests {
     fn soft_double_letter_split_works() {
         // Yes: words with double 'o'; No: words with double 'l'
         let data = words(&["book", "pool", "ball", "tall"]);
-        let sol = minimal_trees_limited(&data, true, Some(1));
+        let sol = minimal_trees_limited(&data, true, true, Some(1));
         assert_eq!(
             sol.cost,
             Cost { nos: 1, hard_nos: 0, sum_nos: 2, sum_hard_nos: 0, depth: 1, word_count: 4 }
@@ -2156,7 +2211,7 @@ mod tests {
     fn soft_mirror_first_last_split_works() {
         // Front test, back requirement mirror keeps the miss soft
         let data = words(&["axe", "exa"]);
-        let sol = minimal_trees_limited(&data, false, Some(1));
+        let sol = minimal_trees_limited(&data, false, true, Some(1));
         assert_eq!(
             sol.cost,
             Cost { nos: 1, hard_nos: 0, sum_nos: 1, sum_hard_nos: 0, depth: 1, word_count: 2 }
