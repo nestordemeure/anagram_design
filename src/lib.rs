@@ -269,49 +269,128 @@ pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option
 }
 
 pub fn format_tree(node: &Node) -> String {
-    // Mimic the `tree` CLI look with box-drawing characters.
-    fn render(node: &Node, prefix: &str, is_last: bool, label: &str, out: &mut String) {
-        let connector = if prefix.is_empty() {
-            "" // root
-        } else if is_last {
-            "└─ "
-        } else {
-            "├─ "
-        };
+    // Helper to capitalize the first letter of a word
+    fn capitalize_first(s: &str) -> String {
+        let mut chars = s.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        }
+    }
 
+    // Render a No branch that diverges sideways from the main spine.
+    fn render_no_branch(node: &Node, prefix: &str, out: &mut String) {
         match node {
-            Node::Leaf(word) => {
+            Node::Leaf(w) => {
                 out.push_str(prefix);
-                out.push_str(connector);
-                out.push_str(label);
-                out.push_str(&format!("Leaf: {}\n", word));
+                out.push_str("└─ No: ");
+                out.push_str(&capitalize_first(w));
+                out.push('\n');
             }
             Node::Repeat(a, b) => {
                 out.push_str(prefix);
-                out.push_str(connector);
-                out.push_str(label);
-                out.push_str(&format!("Repeat: {} / {}\n", a, b));
+                out.push_str("└─ No: Repeat: ");
+                out.push_str(&capitalize_first(a));
+                out.push_str(" / ");
+                out.push_str(&capitalize_first(b));
+                out.push('\n');
             }
             Node::Split { letter, yes, no } => {
+                // No branch that contains another split
+                out.push_str(prefix);
+                out.push_str("└─ No: Contains '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                // The no-branch's children are indented with "│   "
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+
+                // The yes branch of this nested split uses └─ (it's the final item in this branch)
+                render_yes_final(yes, &child_prefix, out);
+            }
+        }
+    }
+
+    // Render a final Yes item (uses └─ marker for leaves/repeats, continues spine for splits)
+    fn render_yes_final(node: &Node, prefix: &str, out: &mut String) {
+        match node {
+            Node::Leaf(w) => {
+                out.push_str(prefix);
+                out.push_str("└─ ");
+                out.push_str(&capitalize_first(w));
+                out.push('\n');
+            }
+            Node::Repeat(a, b) => {
+                out.push_str(prefix);
+                out.push_str("└─ Repeat: ");
+                out.push_str(&capitalize_first(a));
+                out.push_str(" / ");
+                out.push_str(&capitalize_first(b));
+                out.push('\n');
+            }
+            Node::Split { letter, yes, no } => {
+                // For a split in the Yes position, continue the spine pattern
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str("Contains '");
+                out.push(*letter);
+                out.push_str("'?\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
+        }
+    }
+
+    // Render the main Yes spine; No branches jut out to the side.
+    fn render_spine(node: &Node, prefix: &str, is_final: bool, out: &mut String) {
+        match node {
+            Node::Leaf(w) => {
+                let connector = if is_final { "└─ " } else { "├─ " };
                 out.push_str(prefix);
                 out.push_str(connector);
-                out.push_str(label);
-                out.push_str(&format!("Contains '{}'\n", letter));
+                out.push_str(&capitalize_first(w));
+                out.push('\n');
+            }
+            Node::Repeat(a, b) => {
+                let connector = if is_final { "└─ " } else { "├─ " };
+                out.push_str(prefix);
+                out.push_str(connector);
+                out.push_str("Repeat: ");
+                out.push_str(&capitalize_first(a));
+                out.push_str(" / ");
+                out.push_str(&capitalize_first(b));
+                out.push('\n');
+            }
+            Node::Split { letter, yes, no } => {
+                // Print the question
+                out.push_str(prefix);
+                out.push_str("Contains '");
+                out.push(*letter);
+                out.push_str("'?\n");
 
-                let child_prefix = if is_last {
-                    format!("{}    ", prefix)
-                } else {
-                    format!("{}│   ", prefix)
-                };
+                // No branch diverges sideways
+                render_no_branch(no, &format!("{}│", prefix), out);
 
-                render(no, &child_prefix, false, "No: ", out);
-                render(yes, &child_prefix, true, "Yes: ", out);
+                // Spacer line for clarity between decision points
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                // Continue down the Yes spine
+                render_spine(yes, prefix, is_final, out);
             }
         }
     }
 
     let mut out = String::new();
-    render(node, "", true, "", &mut out);
+    render_spine(node, "", true, &mut out);
     out
 }
 

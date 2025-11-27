@@ -19,9 +19,7 @@ Minimal-cost “annagram” trees for a set of words, implemented in Rust.
 cargo run --quiet
 ```
 
-The binary prints the optimal trees for the Zodiac word set twice:
-1. **Allow repeat nodes** (best cost: nos 2, repeats 0, depth 2)
-2. **Forbid repeat nodes** (best cost: nos 2, repeats 0, depth 5)
+The binary prints the optimal trees for the Zodiac word set twice, once allowing `Repeat` nodes and once disalowing them.
 
 Only up to 10 optimal trees are stored and displayed; if more exist, the output notes that it was truncated (cost optimality is still certified).
 
@@ -32,3 +30,8 @@ cargo test
 ```
 
 Includes regression tests and a Zodiac cost check for both settings.
+
+## TODO
+
+* remove repeats from cost function
+* introduce hard no (the basic) vs soft no (all no items share a given letter: E/I, I/E).
