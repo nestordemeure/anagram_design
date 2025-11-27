@@ -26,7 +26,7 @@ cargo run --quiet
 
 The binary prints the optimal trees for the Zodiac word set twice, once allowing `Repeat` nodes and once disalowing them.
 
-Only up to 10 optimal trees are stored and displayed; if more exist, the output notes that it was truncated (cost optimality is still certified).
+Only up to 5 optimal trees are stored and displayed; if more exist, the output notes that it was truncated (cost optimality is still certified).
 
 ## Testing
 

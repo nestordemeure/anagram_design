@@ -11,7 +11,7 @@ fn zodiac_words() -> Vec<String> {
 
 fn print_solutions(allow_repeat: bool) {
     let words = zodiac_words();
-    const DISPLAY: usize = 10;
+    const DISPLAY: usize = 5;
     let result = minimal_trees_limited(&words, allow_repeat, Some(DISPLAY));
     let preview = DISPLAY.min(result.trees.len());
     println!(

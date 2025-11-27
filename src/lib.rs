@@ -324,14 +324,15 @@ fn solve(
             depth: no_sol.cost.depth,
             word_count: no_sol.cost.word_count,
         };
-        let dominant = std::cmp::max(yes_cost, no_cost);
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1; // true tree height
         // Calculate weighted sums: words in no branch encounter 1 additional hard no edge
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
         let branch_cost = Cost {
-            nos: dominant.nos,
-            hard_nos: dominant.hard_nos,
+            nos,
+            hard_nos,
             sum_nos: total_sum_nos,
             sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
@@ -450,15 +451,16 @@ fn solve(
             depth: no_sol.cost.depth,
             word_count: no_sol.cost.word_count,
         };
-        let dominant = std::cmp::max(yes_cost, no_cost);
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
         // Calculate weighted sums: words in no branch encounter 1 additional soft no edge
         // (increments sum_nos but not sum_hard_nos)
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos; // no increment for soft no
         let branch_cost = Cost {
-            nos: dominant.nos,
-            hard_nos: dominant.hard_nos,
+            nos,
+            hard_nos,
             sum_nos: total_sum_nos,
             sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
@@ -553,13 +555,14 @@ fn solve(
             depth: no_sol.cost.depth,
             word_count: no_sol.cost.word_count,
         };
-        let dominant = std::cmp::max(yes_cost, no_cost);
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
         let branch_cost = Cost {
-            nos: dominant.nos,
-            hard_nos: dominant.hard_nos,
+            nos,
+            hard_nos,
             sum_nos: total_sum_nos,
             sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
@@ -673,13 +676,14 @@ fn solve(
             depth: no_sol.cost.depth,
             word_count: no_sol.cost.word_count,
         };
-        let dominant = std::cmp::max(yes_cost, no_cost);
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
         let branch_cost = Cost {
-            nos: dominant.nos,
-            hard_nos: dominant.hard_nos,
+            nos,
+            hard_nos,
             sum_nos: total_sum_nos,
             sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
@@ -775,13 +779,14 @@ fn solve(
             depth: no_sol.cost.depth,
             word_count: no_sol.cost.word_count,
         };
-        let dominant = std::cmp::max(yes_cost, no_cost);
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
         let branch_cost = Cost {
-            nos: dominant.nos,
-            hard_nos: dominant.hard_nos,
+            nos,
+            hard_nos,
             sum_nos: total_sum_nos,
             sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
@@ -895,13 +900,14 @@ fn solve(
             depth: no_sol.cost.depth,
             word_count: no_sol.cost.word_count,
         };
-        let dominant = std::cmp::max(yes_cost, no_cost);
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
         let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
         let branch_cost = Cost {
-            nos: dominant.nos,
-            hard_nos: dominant.hard_nos,
+            nos,
+            hard_nos,
             sum_nos: total_sum_nos,
             sum_hard_nos: total_sum_hard_nos,
             depth: branch_depth,
@@ -1051,7 +1057,8 @@ fn make_second_to_last_letter_masks(words: &[String]) -> [u16; 26] {
 }
 
 pub fn minimal_trees(words: &[String], allow_repeat: bool) -> Solution {
-    minimal_trees_limited(words, allow_repeat, None)
+    // Default to keeping at most 5 optimal trees, matching the CLI display cap.
+    minimal_trees_limited(words, allow_repeat, Some(5))
 }
 
 pub fn minimal_trees_limited(words: &[String], allow_repeat: bool, limit: Option<usize>) -> Solution {
@@ -1454,6 +1461,68 @@ mod tests {
         list.iter().map(|s| s.to_string()).collect()
     }
 
+    /// Recompute the full Cost of a tree by walking it, independent of the solver.
+    fn compute_cost(node: &Node) -> Cost {
+        match node {
+            Node::Leaf(_) => Cost { nos: 0, hard_nos: 0, sum_nos: 0, sum_hard_nos: 0, depth: 0, word_count: 1 },
+            Node::Repeat(_, _) => Cost { nos: 0, hard_nos: 0, sum_nos: 0, sum_hard_nos: 0, depth: 0, word_count: 2 },
+            Node::Split { yes, no, .. }
+            | Node::FirstLetterSplit { yes, no, .. }
+            | Node::LastLetterSplit { yes, no, .. } => {
+                let yes_cost = compute_cost(yes);
+                let no_cost_base = compute_cost(no);
+                let no_cost = Cost {
+                    nos: no_cost_base.nos + 1,
+                    hard_nos: no_cost_base.hard_nos + 1,
+                    sum_nos: no_cost_base.sum_nos,
+                    sum_hard_nos: no_cost_base.sum_hard_nos,
+                    depth: no_cost_base.depth,
+                    word_count: no_cost_base.word_count,
+                };
+                let nos = yes_cost.nos.max(no_cost.nos);
+                let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+                let depth = yes_cost.depth.max(no_cost.depth) + 1;
+                let sum_nos = yes_cost.sum_nos + no_cost.sum_nos + no_cost.word_count;
+                let sum_hard_nos = yes_cost.sum_hard_nos + no_cost.sum_hard_nos + no_cost.word_count;
+                Cost {
+                    nos,
+                    hard_nos,
+                    sum_nos,
+                    sum_hard_nos,
+                    depth,
+                    word_count: yes_cost.word_count + no_cost.word_count,
+                }
+            }
+            Node::SoftSplit { yes, no, .. }
+            | Node::SoftFirstLetterSplit { yes, no, .. }
+            | Node::SoftLastLetterSplit { yes, no, .. } => {
+                let yes_cost = compute_cost(yes);
+                let no_cost_base = compute_cost(no);
+                let no_cost = Cost {
+                    nos: no_cost_base.nos + 1,
+                    hard_nos: no_cost_base.hard_nos,
+                    sum_nos: no_cost_base.sum_nos,
+                    sum_hard_nos: no_cost_base.sum_hard_nos,
+                    depth: no_cost_base.depth,
+                    word_count: no_cost_base.word_count,
+                };
+                let nos = yes_cost.nos.max(no_cost.nos);
+                let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+                let depth = yes_cost.depth.max(no_cost.depth) + 1;
+                let sum_nos = yes_cost.sum_nos + no_cost.sum_nos + no_cost.word_count;
+                let sum_hard_nos = yes_cost.sum_hard_nos + no_cost.sum_hard_nos;
+                Cost {
+                    nos,
+                    hard_nos,
+                    sum_nos,
+                    sum_hard_nos,
+                    depth,
+                    word_count: yes_cost.word_count + no_cost.word_count,
+                }
+            }
+        }
+    }
+
     #[test]
     fn repeat_beats_depth_for_two_words() {
         let data = words(&["alpha", "beta"]);
@@ -1484,7 +1553,7 @@ mod tests {
         //   1. "Contains 'r'? (all No contain 'e')" - soft
         //   2. "Contains 'c'? (all No contain 'g')" - soft (Scorpio has c, Virgo has g)
         // This achieves hard_nos: 0!
-        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 0, sum_nos: 11, sum_hard_nos: 7, depth: 5, word_count: 12 });
+        assert_eq!(allow_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 11, sum_hard_nos: 7, depth: 5, word_count: 12 });
         assert_eq!(no_repeat.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 16, sum_hard_nos: 10, depth: 6, word_count: 12 });
     }
 
@@ -1499,5 +1568,39 @@ mod tests {
         let sol = minimal_trees(&data, true);
         // Should achieve hard_nos: 0 using: r/e soft, then c/g soft
         assert_eq!(sol.cost.hard_nos, 0, "Expected 0 hard NOs (all soft), got {}", sol.cost.hard_nos);
+    }
+
+    #[test]
+    fn recomputed_cost_matches_expected_for_top_tree() {
+        // Use the first printed allow_repeat tree to assert its true hard_no count.
+        let data = words(&[
+            "aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
+        ]);
+        let sol = minimal_trees_limited(&data, true, Some(1));
+        let tree = &sol.trees[0];
+        let cost = compute_cost(tree);
+        assert_eq!(
+            cost,
+            Cost { nos: 2, hard_nos: 1, sum_nos: 11, sum_hard_nos: 7, depth: 5, word_count: 12 },
+            "Recomputed cost for top allow_repeat tree should expose the hard-no count"
+        );
+    }
+
+    #[test]
+    fn solver_advertised_cost_matches_tree_cost_allow_repeat() {
+        let data = words(&[
+            "aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
+        ]);
+        let sol = minimal_trees_limited(&data, true, Some(3));
+        for (idx, tree) in sol.trees.iter().take(3).enumerate() {
+            let tree_cost = compute_cost(tree);
+            assert_eq!(
+                sol.cost, tree_cost,
+                "Tree {} cost mismatch: solver reported {:?}, recomputed {:?}",
+                idx + 1,
+                sol.cost,
+                tree_cost
+            );
+        }
     }
 }
