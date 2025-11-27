@@ -1,33 +1,31 @@
 # Annagram Design
 
-## Theory
+Minimal-cost “annagram” trees for a set of words, implemented in Rust.
 
-An Annagram is a tree that organize a set of words.
+## Model
 
-Leaves each have a single word.
+- Each node tests membership of a letter. Words containing the letter go to **Yes**, the rest to **No**.
+- Leaf: single word, cost `(0,0)`.
+- Split: cost `(1,0) + max(cost(Yes), cost(No))`.
+- Repeat node (optional, only when exactly two words): cost `(0,1)`.
+- Trees are compared lexicographically by `(depth, repeats)` (lower is better).
 
-Nodes have a Yes children, and a No children.
-The test for the presence of a letter, if it is in a word then the word goes in the Yes children, otherwise in the No children.
+## Running
 
-The cost of a tree is `(1,0) + max(cost(Yes), cost(No))`
+```bash
+cargo run --quiet
+```
 
-A leaf, with a single node, has a cost of `(0,0)` (as would a leaf with no words, but those are not expected to exist)
+The binary prints the optimal trees for the Zodiac word set twice:
+1. **Allow repeat nodes** (best cost: depth 3, repeats 1)
+2. **Forbid repeat nodes** (best cost: depth 4, repeats 0)
 
-Their is a special `Repeat` node type for sets of two words, it has a cost of `(0,1)`.
+Only the first 10 trees are shown; the search still computes all optimal trees.
 
-## Goal
+## Testing
 
-Put together an algorithm that can take a set of words and create an annagram tree for them, minimizing cost.
+```bash
+cargo test
+```
 
-We want it to be equiped to display then as a `tree`-like output.
-
-Ideally we want to be able to display *all* trees that have the minimum cost (if there is more than one).
-
-Our test set of words will be the 12 signs of the Zodiac (english spelling).
-
-## TODO
-
-* add a python gitignore
-* write the general algorithm
-* write the Zodiac test
-* run and test it
+Includes regression tests and a Zodiac cost check for both settings.

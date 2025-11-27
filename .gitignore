@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Testing
+.coverage
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Rust
+/target
+Cargo.lock
