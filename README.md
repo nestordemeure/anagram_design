@@ -2,6 +2,18 @@
 
 Minimal-cost “anagram” trees for a set of words, implemented in Rust.
 
+## Code Structure
+
+The codebase is organized into focused modules:
+- **cost.rs** — Cost struct and comparison logic
+- **node.rs** — Node enum variants and combinators
+- **constraints.rs** — Letter constraint rules and soft-no pairs
+- **context.rs** — Word masks and partition iterators
+- **solver.rs** — Core recursive solver algorithm
+- **format.rs** — ASCII tree rendering
+- **api.rs** — Public API (`minimal_trees`, `minimal_trees_limited`)
+- **wasm.rs** — WebAssembly bindings (conditional)
+
 ## Model
 
 Nodes are yes/no questions that partition the word set:
@@ -18,15 +30,44 @@ Nodes are yes/no questions that partition the word set:
   - A No edge adds 1 to `nos` only.
 - **Leaves / Repeat**: at any point you can "name" a specific word; Yes resolves it, No continues with the rest (with repeat disabled below). Adds 0 `nos`/`hard_nos` and 1 `depth`.
 
-### Cost (lexicographically minimized)
+### Splits (rewamped and systematized)
 
-1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches).
-2. `nos` — max No edges on any path.
-3. `sum_hard_nos` — weighted sum of hard No edges.
-4. `sum_nos` — weighted sum of No edges (words in the No branch each add 1).
-5. `depth` — max tree depth.
+Some letters have reciprocals, other letters with which they migh get confused: E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R (those relations go both ways: E is the reciprocal of I, and I is the reciprocal of E).
+In this section we will call `A` a random letter, `A-` its reciprocal, and `B` any other random letter.
 
-Only the first 5 optimal trees are stored/displayed; truncation is noted but optimality still holds.
+Splits (with the exception of Leaves and Repeat) all have hard baseline, and soft variants (note the use of reciprocal to create soft variant, as well as the use of nearby position, and mirror positions):
+* `Contains 'A'?`
+  * `(all No contain 'A-')`
+* `First letter 'A'?`
+  * `(all No have 'A-' first)`
+  * `(all No have 'A' second)`
+  * `(all No have 'A' last)`
+* `Second letter 'A'?`
+  * `(all No have 'A' first)`
+  * `(all No have 'A-' second)`
+  * `(all No have 'A' third)`
+  * `(all No have 'A' second-to-last)`
+* `Third letter 'A'?`
+  * `(all No have 'A' second)`
+  * `(all No have 'A-' third)`
+  * `(all No have 'A' third-to-last)`
+* `Third-to-last letter 'A'?`
+  * `(all No have 'A' third)`
+  * `(all No have 'A-' third-to-last)`
+  * `(all No have 'A' second-to-last)`
+* `Second-to-last letter 'A'?`
+  * `(all No have 'A' second)`
+  * `(all No have 'A' third-to-last)`
+  * `(all No have 'A-' second-to-last)`
+  * `(all No have 'A' last)`
+* `Last letter 'A'?`
+  * `(all No have 'A' first)`
+  * `(all No have 'A' second-to-last)`
+  * `(all No have 'A-' last)`
+* `Double 'A'?`
+  * `(all No have double 'B')`
+* `Triple 'A'?`
+  * `(all No have triple 'B')`
 
 ### Constraints
 
@@ -47,17 +88,15 @@ That rule has one exeption:
 
 There is already some (imperfect and incomplete) logic around those rules in the code, but it needs to be unified to both simplify it and ensure correctness and exhaustivity across operations.
 
-## Code Structure
+### Cost (lexicographically minimized)
 
-The codebase is organized into focused modules:
-- **cost.rs** — Cost struct and comparison logic
-- **node.rs** — Node enum variants and combinators
-- **constraints.rs** — Letter constraint rules and soft-no pairs
-- **context.rs** — Word masks and partition iterators
-- **solver.rs** — Core recursive solver algorithm
-- **format.rs** — ASCII tree rendering
-- **api.rs** — Public API (`minimal_trees`, `minimal_trees_limited`)
-- **wasm.rs** — WebAssembly bindings (conditional)
+1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches).
+2. `nos` — max No edges on any path.
+3. `sum_hard_nos` — weighted sum of hard No edges.
+4. `sum_nos` — weighted sum of No edges (words in the No branch each add 1).
+5. `depth` — max tree depth.
+
+Only the first 5 optimal trees are stored/displayed; truncation is noted but optimality still holds.
 
 ## Running
 
