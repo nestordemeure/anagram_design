@@ -91,8 +91,7 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* further performance optimizations?
-* further subtleties (soft no):
+* further subtleties (mew soft constraints):
   * introduce sounds-based subtleties
 * introduce tree navigator / picker
   requires a representation that lets us stores all the optimal results produced in a single tree (some nodes having several values/children that can be picked)
