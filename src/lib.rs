@@ -2111,7 +2111,7 @@ fn summary_from_solution(sol: &Solution) -> WasmSolution {
             avg_hard_nos,
             avg_nos,
         },
-        trees: sol.trees.iter().map(format_tree).collect(),
+        trees: sol.trees.iter().map(|t| format_tree(t)).collect(),
         exhausted: sol.exhausted,
     }
 }
