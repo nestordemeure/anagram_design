@@ -19,6 +19,7 @@ Nodes are yes/no questions that partition the word set:
 - **Leaves / Repeat**: at any point you can "name" a specific word; Yes resolves it, No continues with the rest (with repeat disabled below). Adds 0 `nos`/`hard_nos` and 1 `depth`.
 
 ### Cost (lexicographically minimized)
+
 1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches).
 2. `nos` — max No edges on any path.
 3. `sum_hard_nos` — weighted sum of hard No edges.
@@ -26,6 +27,25 @@ Nodes are yes/no questions that partition the word set:
 5. `depth` — max tree depth.
 
 Only the first 5 optimal trees are stored/displayed; truncation is noted but optimality still holds.
+
+### Constraints
+
+Splits (with the exeption of Leaves and Repeat) come with a primary letter and a secondary letter.
+
+Hard splits have only a primary letter, it is the letter being tested upon.
+We can consider that letter is both their primary and secondary letter, to simplify things.
+
+Soft split have a primary letter, used for the `yes` branch, and a secondary letter, used as a backup for the `no` branch.
+
+Given a split of primary letter P and secondary letter S:
+* later splits in its `yes` branch *cannot* have P as their primary or secondary letter (they *can* use S in the `yes` branch),
+* later splits in its `no` branch *cannot* have P, *nor S*, as their primary or secondary letter.
+
+That rule has one exeption:
+* a hard contain, of primary letter P, *can* be directly followed by a split whose primary letter is P in its `yes` branch
+* a soft contain, of primary letter P and secondary letter S, *can* be directly followed by a split whose primary letter is P in its `yes` branch, and *can* be directly followed by a split whose primary letter is S in its `no` branch
+
+There is already some (imperfect and incomplete) logic around those rules in the code, but it needs to be unified to both simplify it and ensure correctness and exhaustivity across operations.
 
 ## Running
 
@@ -74,3 +94,5 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 * further performance optimizations?
 * further subtleties (soft no):
   * introduce sounds-based subtleties
+  * ensure contain soft do cover reciprocals (E/I and I/E)
+* ensure we respect constraints
