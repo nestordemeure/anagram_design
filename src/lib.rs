@@ -152,8 +152,57 @@ struct Key {
     mask: u16,
     allow_repeat: bool,
     prioritize_soft_no: bool,
-    /// Bitmask of known letters (letters we know exist in all words in this branch)
-    known_letters: u32,
+    forbidden_primary: u32,
+    forbidden_secondary: u32,
+    allowed_primary_once: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Constraints {
+    /// Letters forbidden as primary letters in this subtree
+    forbidden_primary: u32,
+    /// Letters forbidden as secondary letters in this subtree
+    forbidden_secondary: u32,
+    /// Letters that are temporarily allowed as primary for the *first* split in this subtree
+    /// (used for the contain exceptions)
+    allowed_primary_once: u32,
+}
+
+impl Constraints {
+    fn empty() -> Self {
+        Constraints {
+            forbidden_primary: 0,
+            forbidden_secondary: 0,
+            allowed_primary_once: 0,
+        }
+    }
+
+    fn primary_allowed(&self, idx: usize) -> bool {
+        let bit = 1u32 << idx;
+        (self.forbidden_primary & bit == 0) || (self.allowed_primary_once & bit != 0)
+    }
+
+    fn secondary_allowed(&self, idx: usize) -> bool {
+        let bit = 1u32 << idx;
+        self.forbidden_secondary & bit == 0
+    }
+
+    /// Clear one-time allowances when descending; persistent forbiddances stay.
+    fn next_level(&self) -> Self {
+        Constraints {
+            forbidden_primary: self.forbidden_primary,
+            forbidden_secondary: self.forbidden_secondary,
+            allowed_primary_once: 0,
+        }
+    }
+
+    fn prune(self, present_letters: u32) -> Self {
+        Constraints {
+            forbidden_primary: self.forbidden_primary & present_letters,
+            forbidden_secondary: self.forbidden_secondary & present_letters,
+            allowed_primary_once: self.allowed_primary_once & present_letters,
+        }
+    }
 }
 
 /// Defines a soft no pair: (test_letter, requirement_letter)
@@ -334,6 +383,51 @@ fn partitions(mask: u16, masks: &[u16; 26]) -> Vec<(usize, u16, u16)> {
         .collect()
 }
 
+fn split_allowed(constraints: &Constraints, primary_idx: usize, secondary_idx: usize) -> bool {
+    constraints.primary_allowed(primary_idx) && constraints.secondary_allowed(secondary_idx)
+}
+
+fn branch_constraints(
+    constraints: &Constraints,
+    primary_idx: usize,
+    secondary_idx: usize,
+    yes_primary_allow: Option<u32>,
+    no_primary_allow: Option<u32>,
+) -> (Constraints, Constraints) {
+    let mut yes = constraints.next_level();
+    let mut no = constraints.next_level();
+
+    let primary_bit = 1u32 << primary_idx;
+    let secondary_bit = 1u32 << secondary_idx;
+
+    // Apply the general rule
+    yes.forbidden_primary |= primary_bit;
+    yes.forbidden_secondary |= primary_bit;
+
+    no.forbidden_primary |= primary_bit | secondary_bit;
+    no.forbidden_secondary |= primary_bit | secondary_bit;
+
+    // Exception allowances (single-use)
+    if let Some(bit) = yes_primary_allow {
+        yes.allowed_primary_once |= bit;
+    }
+    if let Some(bit) = no_primary_allow {
+        no.allowed_primary_once |= bit;
+    }
+
+    (yes, no)
+}
+
+fn letters_present(mask: u16, ctx: &Context<'_>) -> u32 {
+    let mut present: u32 = 0;
+    for idx in 0..26 {
+        if mask & ctx.letter_masks[idx] != 0 {
+            present |= 1u32 << idx;
+        }
+    }
+    present
+}
+
 fn combine_children(letter: char, left: &Node, right: &Node) -> Node {
     Node::Split {
         letter,
@@ -449,15 +543,20 @@ fn solve(
     ctx: &Context<'_>,
     allow_repeat: bool,
     prioritize_soft_no: bool,
-    known_letters: u32,
+    constraints: Constraints,
     limit: Option<usize>,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
+    let present_letters = letters_present(mask, ctx);
+    let constraints = constraints.prune(present_letters);
+
     let key = Key {
         mask,
         allow_repeat,
         prioritize_soft_no,
-        known_letters,
+        forbidden_primary: constraints.forbidden_primary,
+        forbidden_secondary: constraints.forbidden_secondary,
+        allowed_primary_once: constraints.allowed_primary_once,
     };
     if let Some(hit) = memo.get(&key) {
         return hit.clone();
@@ -504,7 +603,7 @@ fn solve(
                 ctx,
                 false, // disable repeat for descendants
                 prioritize_soft_no,
-                known_letters,
+                constraints,
                 limit,
                 memo,
             );
@@ -588,15 +687,26 @@ fn solve(
     }
 
     for (idx, yes, no) in partitions(mask, &ctx.letter_masks) {
-        // In the YES branch, we know this letter exists in all words
+        if !split_allowed(&constraints, idx, idx) {
+            continue;
+        }
+
         let letter_bit = 1u32 << idx;
-        let yes_known = known_letters | letter_bit;
+        // Hard contain split; allow primary letter reuse in the YES child only.
+        let (yes_constraints, no_constraints) = branch_constraints(
+            &constraints,
+            idx,
+            idx,
+            Some(letter_bit),
+            None,
+        );
+
         let yes_sol = solve(
             yes,
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            yes_known,
+            yes_constraints,
             limit,
             memo,
         );
@@ -605,7 +715,7 @@ fn solve(
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            known_letters,
+            no_constraints,
             limit,
             memo,
         );
@@ -709,6 +819,10 @@ fn solve(
         let test_bit = 1u32 << test_idx;
         let requirement_bit = 1u32 << requirement_idx;
 
+        if !split_allowed(&constraints, test_idx, requirement_idx) {
+            continue;
+        }
+
         let yes = mask & ctx.letter_masks[test_idx];
         if yes == 0 || yes == mask {
             continue; // does not partition the set
@@ -720,15 +834,19 @@ fn solve(
             continue; // not all No items contain the requirement letter
         }
 
-        // In the YES branch, we know the test_letter exists; in the NO branch, we know the requirement_letter exists
-        let yes_known = known_letters | test_bit;
-        let no_known = known_letters | requirement_bit;
+        let (yes_constraints, no_constraints) = branch_constraints(
+            &constraints,
+            test_idx,
+            requirement_idx,
+            Some(test_bit),  // soft contain can reuse P in YES
+            Some(requirement_bit), // soft contain can reuse S in NO
+        );
         let yes_sol = solve(
             yes,
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            yes_known,
+            yes_constraints,
             limit,
             memo,
         );
@@ -737,7 +855,7 @@ fn solve(
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            no_known,
+            no_constraints,
             limit,
             memo,
         );
@@ -845,7 +963,9 @@ fn solve(
 
     // Soft double-letter splits: Yes has two of test_letter; No has two of a different uniform letter
     for (test_idx, yes, no) in partitions(mask, &ctx.double_letter_masks) {
-        let test_bit = 1u32 << test_idx;
+        if !constraints.primary_allowed(test_idx) {
+            continue;
+        }
 
         // Determine if all "no" words share a different double letter
         let mut requirement_idx_opt: Option<usize> = None;
@@ -864,16 +984,24 @@ fn solve(
             None => continue, // no uniform double letter in no-branch
         };
 
-        let requirement_bit = 1u32 << requirement_idx;
+        if !split_allowed(&constraints, test_idx, requirement_idx) {
+            continue;
+        }
 
-        let yes_known = known_letters | test_bit;
-        let no_known = known_letters | requirement_bit;
+        let (yes_constraints, no_constraints) = branch_constraints(
+            &constraints,
+            test_idx,
+            requirement_idx,
+            None,
+            None,
+        );
+
         let yes_sol = solve(
             yes,
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            yes_known,
+            yes_constraints,
             limit,
             memo,
         );
@@ -882,7 +1010,7 @@ fn solve(
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            no_known,
+            no_constraints,
             limit,
             memo,
         );
@@ -995,15 +1123,17 @@ fn solve(
 
     // First-letter hard splits
     for (idx, yes, no) in partitions(mask, &ctx.first_letter_masks) {
-        // In the YES branch, we know this letter exists in all words (as first letter)
-        let letter_bit = 1u32 << idx;
-        let yes_known = known_letters | letter_bit;
+        if !split_allowed(&constraints, idx, idx) {
+            continue;
+        }
+
+        let (yes_constraints, no_constraints) = branch_constraints(&constraints, idx, idx, None, None);
         let yes_sol = solve(
             yes,
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            yes_known,
+            yes_constraints,
             limit,
             memo,
         );
@@ -1012,7 +1142,7 @@ fn solve(
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            known_letters,
+            no_constraints,
             limit,
             memo,
         );
@@ -1109,22 +1239,23 @@ fn solve(
 
     // Soft first-letter splits: test first letter, require all No items have the same letter as second letter
     for (idx, yes, no) in partitions(mask, &ctx.first_letter_masks) {
-        let letter_bit = 1u32 << idx;
+        if !split_allowed(&constraints, idx, idx) {
+            continue;
+        }
 
         // Check if all items in the "no" set have the same letter as second letter
         if no & ctx.second_letter_masks[idx] != no {
             continue;
         }
 
-        // In YES branch, we know letter is first; in NO branch, we know letter is second
-        // Either way, the letter exists in all words
-        let child_known = known_letters | letter_bit;
+        let (yes_constraints, no_constraints) =
+            branch_constraints(&constraints, idx, idx, None, None);
         let yes_sol = solve(
             yes,
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            child_known,
+            yes_constraints,
             limit,
             memo,
         );
@@ -1133,7 +1264,7 @@ fn solve(
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            child_known,
+            no_constraints,
             limit,
             memo,
         );
@@ -1231,7 +1362,9 @@ fn solve(
     // Positional mirror soft splits: test position from the start, require the mirror position from the end (1st↔last, 2nd↔second-to-last, 3rd↔third-to-last)
     for pos in 1..=3 {
         for idx in 0..26 {
-            let letter_bit = 1u32 << idx;
+            if !split_allowed(&constraints, idx, idx) {
+                continue;
+            }
             let yes = mask & position_mask(ctx, false, pos, idx);
             if yes == 0 || yes == mask {
                 continue;
@@ -1243,13 +1376,14 @@ fn solve(
                 continue;
             }
 
-            let child_known = known_letters | letter_bit;
+            let (yes_constraints, no_constraints) =
+                branch_constraints(&constraints, idx, idx, None, None);
             let yes_sol = solve(
                 yes,
                 ctx,
                 allow_repeat,
                 prioritize_soft_no,
-                child_known,
+                yes_constraints,
                 limit,
                 memo,
             );
@@ -1258,7 +1392,7 @@ fn solve(
                 ctx,
                 allow_repeat,
                 prioritize_soft_no,
-                child_known,
+                no_constraints,
                 limit,
                 memo,
             );
@@ -1362,7 +1496,9 @@ fn solve(
     // Positional mirror soft splits: test position from the end, require the mirror position from the start (last↔first, etc.)
     for pos in 1..=3 {
         for idx in 0..26 {
-            let letter_bit = 1u32 << idx;
+            if !split_allowed(&constraints, idx, idx) {
+                continue;
+            }
             let yes = mask & position_mask(ctx, true, pos, idx);
             if yes == 0 || yes == mask {
                 continue;
@@ -1374,13 +1510,14 @@ fn solve(
                 continue;
             }
 
-            let child_known = known_letters | letter_bit;
+            let (yes_constraints, no_constraints) =
+                branch_constraints(&constraints, idx, idx, None, None);
             let yes_sol = solve(
                 yes,
                 ctx,
                 allow_repeat,
                 prioritize_soft_no,
-                child_known,
+                yes_constraints,
                 limit,
                 memo,
             );
@@ -1389,7 +1526,7 @@ fn solve(
                 ctx,
                 allow_repeat,
                 prioritize_soft_no,
-                child_known,
+                no_constraints,
                 limit,
                 memo,
             );
@@ -1492,15 +1629,17 @@ fn solve(
 
     // Last-letter hard splits
     for (idx, yes, no) in partitions(mask, &ctx.last_letter_masks) {
-        // In the YES branch, we know this letter exists in all words (as last letter)
-        let letter_bit = 1u32 << idx;
-        let yes_known = known_letters | letter_bit;
+        if !split_allowed(&constraints, idx, idx) {
+            continue;
+        }
+
+        let (yes_constraints, no_constraints) = branch_constraints(&constraints, idx, idx, None, None);
         let yes_sol = solve(
             yes,
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            yes_known,
+            yes_constraints,
             limit,
             memo,
         );
@@ -1509,7 +1648,7 @@ fn solve(
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            known_letters,
+            no_constraints,
             limit,
             memo,
         );
@@ -1606,22 +1745,23 @@ fn solve(
 
     // Soft last-letter splits: test last letter, require all No items have the same letter as second-to-last letter
     for (idx, yes, no) in partitions(mask, &ctx.last_letter_masks) {
-        let letter_bit = 1u32 << idx;
+        if !split_allowed(&constraints, idx, idx) {
+            continue;
+        }
 
         // Check if all items in the "no" set have the same letter as second-to-last letter
         if no & ctx.second_to_last_letter_masks[idx] != no {
             continue;
         }
 
-        // In YES branch, we know letter is last; in NO branch, we know letter is second-to-last
-        // Either way, the letter exists in all words
-        let child_known = known_letters | letter_bit;
+        let (yes_constraints, no_constraints) =
+            branch_constraints(&constraints, idx, idx, None, None);
         let yes_sol = solve(
             yes,
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            child_known,
+            yes_constraints,
             limit,
             memo,
         );
@@ -1630,7 +1770,7 @@ fn solve(
             ctx,
             allow_repeat,
             prioritize_soft_no,
-            child_known,
+            no_constraints,
             limit,
             memo,
         );
@@ -1892,7 +2032,7 @@ pub fn minimal_trees_limited(
         &ctx,
         allow_repeat,
         prioritize_soft_no,
-        0,
+        Constraints::empty(),
         limit,
         &mut memo,
     )
@@ -2772,7 +2912,7 @@ mod tests {
                 nos: 1,
                 hard_nos: 1,
                 sum_nos: 2,
-                sum_hard_nos: 1,
+                sum_hard_nos: 2,
                 depth: 2,
                 word_count: 3
             }
@@ -2806,21 +2946,21 @@ mod tests {
             allow_repeat.cost,
             Cost {
                 nos: 2,
-                hard_nos: 0,
-                sum_nos: 14,
-                sum_hard_nos: 0,
-                depth: 7,
+                hard_nos: 1,
+                sum_nos: 16,
+                sum_hard_nos: 4,
+                depth: 6,
                 word_count: 12
             }
         );
         assert_eq!(
             no_repeat.cost,
             Cost {
-                nos: 3,
-                hard_nos: 0,
-                sum_nos: 20,
-                sum_hard_nos: 0,
-                depth: 7,
+                nos: 2,
+                hard_nos: 1,
+                sum_nos: 16,
+                sum_hard_nos: 7,
+                depth: 6,
                 word_count: 12
             }
         );
@@ -2845,23 +2985,22 @@ mod tests {
 
     #[test]
     fn soft_known_letter_pruning_regression() {
-        // Under the written rules, two nested soft tests should give 0 hard NOs:
-        //   1) Contains 'r'? (all No contain 'e')
-        //   2) In the Yes branch, Contains 't'? (all No contain 'r')
-        // Current solver skips step (2) because 'r' is already known, so it returns hard_nos = 1.
+        // Under the stricter primary/secondary constraints, we cannot reuse the first split's
+        // primary letter ('r') as a secondary letter in its Yes branch. That forces a hard edge
+        // in the best tree for this tiny dataset.
         let data = words(&["tr", "r", "e"]);
         let sol = minimal_trees(&data, false, true);
         assert_eq!(
             sol.cost,
             Cost {
-                hard_nos: 0,
+                hard_nos: 1,
                 nos: 1,
-                sum_hard_nos: 0,
+                sum_hard_nos: 1,
                 sum_nos: 2,
                 depth: 2,
                 word_count: 3
             },
-            "Expected fully-soft separation with 0 hard NOs; got {:?}",
+            "Expected constrained separation with exactly one hard NO; got {:?}",
             sol.cost
         );
     }
@@ -2890,10 +3029,10 @@ mod tests {
             cost,
             Cost {
                 nos: 2,
-                hard_nos: 0,
-                sum_nos: 14,
-                sum_hard_nos: 0,
-                depth: 7,
+                hard_nos: 1,
+                sum_nos: 16,
+                sum_hard_nos: 4,
+                depth: 6,
                 word_count: 12
             }
         );
