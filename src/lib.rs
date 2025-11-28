@@ -1942,6 +1942,11 @@ pub fn format_tree(node: &Node) -> String {
         }
     }
 
+    // Display helper: show question letters in uppercase for clarity in ASCII trees
+    fn display_letter(c: char) -> char {
+        c.to_ascii_uppercase()
+    }
+
     fn describe_pos(from_end: bool, idx: u8) -> String {
         match (from_end, idx) {
             (false, 1) => "first".to_string(),
@@ -1975,7 +1980,7 @@ pub fn format_tree(node: &Node) -> String {
                 // No branch that contains another split
                 out.push_str(prefix);
                 out.push_str("└─ No: Contains '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 // The no-branch's children are indented with "│   "
@@ -1994,9 +1999,9 @@ pub fn format_tree(node: &Node) -> String {
                 // No branch that contains a soft split
                 out.push_str(prefix);
                 out.push_str("└─ No: Contains '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No contain '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("')\n");
 
                 // The no-branch's children are indented with "│   "
@@ -2010,7 +2015,7 @@ pub fn format_tree(node: &Node) -> String {
                 // No branch that contains a first letter split
                 out.push_str(prefix);
                 out.push_str("└─ No: First letter '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 let child_prefix = format!("{}   ", prefix);
@@ -2026,9 +2031,9 @@ pub fn format_tree(node: &Node) -> String {
                 // No branch that contains a soft first letter split
                 out.push_str(prefix);
                 out.push_str("└─ No: First letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("' second)\n");
 
                 let child_prefix = format!("{}   ", prefix);
@@ -2039,7 +2044,7 @@ pub fn format_tree(node: &Node) -> String {
                 // No branch that contains a last letter split
                 out.push_str(prefix);
                 out.push_str("└─ No: Last letter '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 let child_prefix = format!("{}   ", prefix);
@@ -2055,9 +2060,9 @@ pub fn format_tree(node: &Node) -> String {
                 // No branch that contains a soft last letter split
                 out.push_str(prefix);
                 out.push_str("└─ No: Last letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("' second-to-last)\n");
 
                 let child_prefix = format!("{}   ", prefix);
@@ -2077,7 +2082,7 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str("└─ No: ");
                 out.push_str(&describe_pos(*test_from_end, *test_index));
                 out.push_str(" letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have it ");
                 out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
                 out.push_str(")\n");
@@ -2094,9 +2099,9 @@ pub fn format_tree(node: &Node) -> String {
             } => {
                 out.push_str(prefix);
                 out.push_str("└─ No: Double '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No double '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("')\n");
 
                 let child_prefix = format!("{}   ", prefix);
@@ -2130,7 +2135,7 @@ pub fn format_tree(node: &Node) -> String {
 
                 out.push_str(prefix);
                 out.push_str("Contains '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -2152,9 +2157,9 @@ pub fn format_tree(node: &Node) -> String {
 
                 out.push_str(prefix);
                 out.push_str("Contains '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No contain '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("')\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -2171,7 +2176,7 @@ pub fn format_tree(node: &Node) -> String {
 
                 out.push_str(prefix);
                 out.push_str("First letter '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -2193,9 +2198,9 @@ pub fn format_tree(node: &Node) -> String {
 
                 out.push_str(prefix);
                 out.push_str("First letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("' second)\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -2212,7 +2217,7 @@ pub fn format_tree(node: &Node) -> String {
 
                 out.push_str(prefix);
                 out.push_str("Last letter '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -2234,9 +2239,9 @@ pub fn format_tree(node: &Node) -> String {
 
                 out.push_str(prefix);
                 out.push_str("Last letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("' second-to-last)\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -2261,7 +2266,7 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(prefix);
                 out.push_str(&describe_pos(*test_from_end, *test_index));
                 out.push_str(" letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have it ");
                 out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
                 out.push_str(")\n");
@@ -2284,9 +2289,9 @@ pub fn format_tree(node: &Node) -> String {
 
                 out.push_str(prefix);
                 out.push_str("Double '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No double '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("')\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -2323,7 +2328,7 @@ pub fn format_tree(node: &Node) -> String {
                 // Print the question
                 out.push_str(prefix);
                 out.push_str("Contains '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 // No branch diverges sideways
@@ -2345,9 +2350,9 @@ pub fn format_tree(node: &Node) -> String {
                 // Print the question for soft split
                 out.push_str(prefix);
                 out.push_str("Contains '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No contain '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("')\n");
 
                 // No branch diverges sideways
@@ -2364,7 +2369,7 @@ pub fn format_tree(node: &Node) -> String {
                 // Print the question for first letter split
                 out.push_str(prefix);
                 out.push_str("First letter '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 // No branch diverges sideways
@@ -2386,9 +2391,9 @@ pub fn format_tree(node: &Node) -> String {
                 // Print the question for soft first letter split
                 out.push_str(prefix);
                 out.push_str("First letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("' second)\n");
 
                 // No branch diverges sideways
@@ -2405,7 +2410,7 @@ pub fn format_tree(node: &Node) -> String {
                 // Print the question for last letter split
                 out.push_str(prefix);
                 out.push_str("Last letter '");
-                out.push(*letter);
+                out.push(display_letter(*letter));
                 out.push_str("'?\n");
 
                 // No branch diverges sideways
@@ -2427,9 +2432,9 @@ pub fn format_tree(node: &Node) -> String {
                 // Print the question for soft last letter split
                 out.push_str(prefix);
                 out.push_str("Last letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("' second-to-last)\n");
 
                 // No branch diverges sideways
@@ -2454,7 +2459,7 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(prefix);
                 out.push_str(&describe_pos(*test_from_end, *test_index));
                 out.push_str(" letter '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No have it ");
                 out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
                 out.push_str(")\n");
@@ -2474,9 +2479,9 @@ pub fn format_tree(node: &Node) -> String {
             } => {
                 out.push_str(prefix);
                 out.push_str("Double '");
-                out.push(*test_letter);
+                out.push(display_letter(*test_letter));
                 out.push_str("'? (all No double '");
-                out.push(*requirement_letter);
+                out.push(display_letter(*requirement_letter));
                 out.push_str("')\n");
 
                 render_no_branch(no, &format!("{}│", prefix), out);
