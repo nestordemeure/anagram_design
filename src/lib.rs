@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::collections::HashMap;
+use smallvec::SmallVec;
 
 #[cfg(target_arch = "wasm32")]
 use serde::Serialize;
@@ -548,7 +549,7 @@ fn combine_soft_double_letter_children(
     })
 }
 
-fn push_limited(target: &mut Vec<NodeRef>, limit: Option<usize>, node: NodeRef) -> bool {
+fn push_limited(target: &mut SmallVec<[NodeRef; 5]>, limit: Option<usize>, node: NodeRef) -> bool {
     match limit {
         Some(max) if target.len() >= max => false,
         _ => {
@@ -604,7 +605,7 @@ fn solve(
     }
 
     let mut best_cost: Option<Cost> = None;
-    let mut best_trees: Vec<NodeRef> = Vec::new();
+    let mut best_trees: SmallVec<[NodeRef; 5]> = SmallVec::new();
     let mut exhausted = false;
 
     // Repeat node option: directly guess a specific word; Yes resolves that word, No continues.
@@ -1887,7 +1888,7 @@ fn solve(
 
     let sol = Solution {
         cost: best_cost.expect("At least one tree must be found"),
-        trees: best_trees,
+        trees: best_trees.into_vec(),
         exhausted,
     };
     memo.insert(key, sol.clone());

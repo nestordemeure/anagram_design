@@ -65,8 +65,8 @@ Current commit: 9465242
 - Tests: `cargo test --quiet` (all pass).  
 - Timing command: `/usr/bin/time -f "%e" cargo run --release --quiet >/dev/null`  
 - Runs (6x): 2.36s, 2.25s, 2.31s, 2.24s, 2.30s, 2.32s  
-- Result: **min runtime = 2.24s** (new baseline).  
-- Notes: This is the platform for future experiments.
+- Result: **min runtime = 2.24s** (baseline at that time).  
+- Notes: Platform for subsequent experiments.
 
 ### Cache letters_present per mask (discarded)
 - Branch: `optim-letters-present-cache` (discarded).  
@@ -77,3 +77,13 @@ Current commit: 9465242
 - Branch: none (exploration started on `optim-combined`, reverted).  
 - Idea: replace leaf/repeat payloads with word indices to cut string cloning and shrink trees.  
 - Status: refactor touched large rendering/test surface; rolled back before benchmarking. Could revisit later with a dedicated branch and staged steps (e.g., add index-based nodes while keeping formatting compatibility via word table).
+
+### SmallVec for best trees buffer
+- Branch: `optim-smallvec` (from `optim-combined`).  
+- Change: use `SmallVec<[NodeRef; 5]>` for the hot `best_trees` buffer (still spills to heap if more than 5).  
+- Build: `cargo build --release --quiet`  
+- Tests: `cargo test --quiet` (all pass).  
+- Timing command: `/usr/bin/time -f "%e" cargo run --release --quiet >/dev/null`  
+- Runs (6x): 2.20s, 2.21s, 2.17s, 2.18s, 2.16s, 2.16s  
+- Result: **min runtime = 2.16s** (new baseline).  
+- Notes: ~3.6% faster than 2.24s baseline; safe even if tree cap increases because `SmallVec` spills to heap beyond inline capacity.
