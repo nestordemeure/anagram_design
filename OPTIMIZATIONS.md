@@ -59,24 +59,19 @@ Current commit: 9465242
 - Result: **min runtime = 2.37s** (baseline 12.71s) → ~10.34s faster (~81%).  
 - Notes: Large speedup from eliminating repeated full-tree cloning; keeps public API behavior the same (formatting still works).
 
-### Combined Rc + partition iterator (current baseline)
+### Combined Rc + partition iterator
 - Branch: `optim-combined` (merged `optim-reduce-cloning` + `optim-partition-reuse`).  
 - Build: `cargo build --release --quiet`  
 - Tests: `cargo test --quiet` (all pass).  
 - Timing command: `/usr/bin/time -f "%e" cargo run --release --quiet >/dev/null`  
 - Runs (6x): 2.36s, 2.25s, 2.31s, 2.24s, 2.30s, 2.32s  
 - Result: **min runtime = 2.24s** (baseline at that time).  
-- Notes: Platform for subsequent experiments.
+- Notes: Platform for subsequent experiments (superseded by later baselines).
 
 ### Cache letters_present per mask (discarded)
 - Branch: `optim-letters-present-cache` (discarded).  
 - Change: precompute `present_letters` for all masks and reuse in solver key/constraint pruning.  
 - Timing runs showed a slowdown vs baseline; not kept.
-
-### Store word indices instead of Strings (abandoned for now)
-- Branch: none (exploration started on `optim-combined`, reverted).  
-- Idea: replace leaf/repeat payloads with word indices to cut string cloning and shrink trees.  
-- Status: refactor touched large rendering/test surface; rolled back before benchmarking. Could revisit later with a dedicated branch and staged steps (e.g., add index-based nodes while keeping formatting compatibility via word table).
 
 ### SmallVec for best trees buffer
 - Branch: `optim-smallvec` (from `optim-combined`).  
