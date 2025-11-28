@@ -91,10 +91,17 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* further subtleties (mew soft constraints):
-  * introduce sounds-based subtleties
+* is depth actually discriminant in the cost function?
+
+* make hard soft constraints more printipled: all soft constraints have a hard equivalent, some hard ones have several soft ones
+* add another exption to the "do not use the letter" rule (around first actually second)
+
 * introduce tree navigator / picker
   requires a representation that lets us stores all the optimal results produced in a single tree (some nodes having several values/children that can be picked)
   that representation need to be able to be sent to javascript
   and in javascirpt we ned to be able to click on a node with various values (those should be denoted) in order to select our favorite ones
   it should remember what we pick so that, when picking away and back, we do not have to reselect everything
+  display in ASCII, emulating the rust format, nodes in bold can be clicked on for a dropdown menu giving you alternatives
+
+* further subtleties (mew soft constraints):
+  * introduce sounds-based subtleties
