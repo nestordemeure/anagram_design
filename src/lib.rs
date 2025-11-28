@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::rc::Rc;
+use hashbrown::HashMap;
+use smallvec::SmallVec;
 
 #[cfg(target_arch = "wasm32")]
 use serde::Serialize;
@@ -75,46 +77,46 @@ pub enum Node {
     /// Ask directly for a specific word; Yes resolves that word, No continues with the rest.
     Repeat {
         word: String,
-        no: Box<Node>,
+        no: Rc<Node>,
     },
     Split {
         letter: char,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
     SoftSplit {
         /// Letter to test for (e.g., 'i' in I/E)
         test_letter: char,
         /// Letter that all No items must contain (e.g., 'e' in I/E)
         requirement_letter: char,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
     FirstLetterSplit {
         letter: char,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
     SoftFirstLetterSplit {
         /// Letter to test as first letter
         test_letter: char,
         /// Letter that all No items must have as second letter
         requirement_letter: char,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
     LastLetterSplit {
         letter: char,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
     SoftLastLetterSplit {
         /// Letter to test as last letter
         test_letter: char,
         /// Letter that all No items must have as second-to-last letter
         requirement_letter: char,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
     SoftMirrorPosSplit {
         /// Letter to test
@@ -127,23 +129,24 @@ pub enum Node {
         requirement_index: u8,
         /// true when the requirement position is counted from the end
         requirement_from_end: bool,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
     SoftDoubleLetterSplit {
         /// Letter that must appear twice in the Yes branch
         test_letter: char,
         /// Letter (different) that must appear twice in all No items
         requirement_letter: char,
-        yes: Box<Node>,
-        no: Box<Node>,
+        yes: Rc<Node>,
+        no: Rc<Node>,
     },
 }
 
+type NodeRef = Rc<Node>;
 #[derive(Debug, Clone)]
 pub struct Solution {
     pub cost: Cost,
-    pub trees: Vec<Node>,
+    pub trees: Vec<NodeRef>,
     pub exhausted: bool,
 }
 
@@ -368,19 +371,37 @@ fn single_word_from_mask(mask: u16, words: &[String]) -> Option<String> {
 
 /// Return all letter indices that produce a true partition of `mask` with the given per-letter masks.
 /// Each item is (letter_index, yes_mask, no_mask).
-fn partitions(mask: u16, masks: &[u16; 26]) -> Vec<(usize, u16, u16)> {
-    masks
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &letter_mask)| {
-            let yes = mask & letter_mask;
-            if yes == 0 || yes == mask {
-                None
-            } else {
-                Some((idx, yes, mask & !letter_mask))
+struct Partitions<'a> {
+    masks: &'a [u16; 26],
+    mask: u16,
+    idx: usize,
+}
+
+impl<'a> Iterator for Partitions<'a> {
+    type Item = (usize, u16, u16);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.idx < 26 {
+            let current_idx = self.idx;
+            self.idx += 1;
+            let letter_mask = self.masks[current_idx];
+            let yes = self.mask & letter_mask;
+            if yes == 0 || yes == self.mask {
+                continue;
             }
-        })
-        .collect()
+            let no = self.mask & !letter_mask;
+            return Some((current_idx, yes, no));
+        }
+        None
+    }
+}
+
+fn partitions(mask: u16, masks: &[u16; 26]) -> Partitions<'_> {
+    Partitions {
+        masks,
+        mask,
+        idx: 0,
+    }
 }
 
 fn split_allowed(constraints: &Constraints, primary_idx: usize, secondary_idx: usize) -> bool {
@@ -428,70 +449,70 @@ fn letters_present(mask: u16, ctx: &Context<'_>) -> u32 {
     present
 }
 
-fn combine_children(letter: char, left: &Node, right: &Node) -> Node {
-    Node::Split {
+fn combine_children(letter: char, left: &NodeRef, right: &NodeRef) -> NodeRef {
+    Rc::new(Node::Split {
         letter,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
 fn combine_soft_children(
     test_letter: char,
     requirement_letter: char,
-    left: &Node,
-    right: &Node,
-) -> Node {
-    Node::SoftSplit {
+    left: &NodeRef,
+    right: &NodeRef,
+) -> NodeRef {
+    Rc::new(Node::SoftSplit {
         test_letter,
         requirement_letter,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
-fn combine_first_letter_children(letter: char, left: &Node, right: &Node) -> Node {
-    Node::FirstLetterSplit {
+fn combine_first_letter_children(letter: char, left: &NodeRef, right: &NodeRef) -> NodeRef {
+    Rc::new(Node::FirstLetterSplit {
         letter,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
 fn combine_soft_first_letter_children(
     test_letter: char,
     requirement_letter: char,
-    left: &Node,
-    right: &Node,
-) -> Node {
-    Node::SoftFirstLetterSplit {
+    left: &NodeRef,
+    right: &NodeRef,
+) -> NodeRef {
+    Rc::new(Node::SoftFirstLetterSplit {
         test_letter,
         requirement_letter,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
-fn combine_last_letter_children(letter: char, left: &Node, right: &Node) -> Node {
-    Node::LastLetterSplit {
+fn combine_last_letter_children(letter: char, left: &NodeRef, right: &NodeRef) -> NodeRef {
+    Rc::new(Node::LastLetterSplit {
         letter,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
 fn combine_soft_last_letter_children(
     test_letter: char,
     requirement_letter: char,
-    left: &Node,
-    right: &Node,
-) -> Node {
-    Node::SoftLastLetterSplit {
+    left: &NodeRef,
+    right: &NodeRef,
+) -> NodeRef {
+    Rc::new(Node::SoftLastLetterSplit {
         test_letter,
         requirement_letter,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
 fn combine_soft_mirror_pos_children(
@@ -500,35 +521,35 @@ fn combine_soft_mirror_pos_children(
     test_from_end: bool,
     requirement_index: u8,
     requirement_from_end: bool,
-    left: &Node,
-    right: &Node,
-) -> Node {
-    Node::SoftMirrorPosSplit {
+    left: &NodeRef,
+    right: &NodeRef,
+) -> NodeRef {
+    Rc::new(Node::SoftMirrorPosSplit {
         test_letter,
         test_index,
         test_from_end,
         requirement_index,
         requirement_from_end,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
 fn combine_soft_double_letter_children(
     test_letter: char,
     requirement_letter: char,
-    left: &Node,
-    right: &Node,
-) -> Node {
-    Node::SoftDoubleLetterSplit {
+    left: &NodeRef,
+    right: &NodeRef,
+) -> NodeRef {
+    Rc::new(Node::SoftDoubleLetterSplit {
         test_letter,
         requirement_letter,
-        yes: Box::new(left.clone()),
-        no: Box::new(right.clone()),
-    }
+        yes: Rc::clone(left),
+        no: Rc::clone(right),
+    })
 }
 
-fn push_limited(target: &mut Vec<Node>, limit: Option<usize>, node: Node) -> bool {
+fn push_limited(target: &mut SmallVec<[NodeRef; 5]>, limit: Option<usize>, node: NodeRef) -> bool {
     match limit {
         Some(max) if target.len() >= max => false,
         _ => {
@@ -576,7 +597,7 @@ fn solve(
                 depth: 0,
                 word_count: 1,
             },
-            trees: vec![Node::Leaf(word)],
+            trees: vec![Rc::new(Node::Leaf(word))],
             exhausted: false,
         };
         memo.insert(key, sol.clone());
@@ -584,7 +605,7 @@ fn solve(
     }
 
     let mut best_cost: Option<Cost> = None;
-    let mut best_trees: Vec<Node> = Vec::new();
+    let mut best_trees: SmallVec<[NodeRef; 5]> = SmallVec::new();
     let mut exhausted = false;
 
     // Repeat node option: directly guess a specific word; Yes resolves that word, No continues.
@@ -633,10 +654,10 @@ fn solve(
                         if !push_limited(
                             &mut best_trees,
                             limit,
-                            Node::Repeat {
+                            Rc::new(Node::Repeat {
                                 word: word.clone(),
-                                no: Box::new(n.clone()),
-                            },
+                                no: Rc::clone(n),
+                            }),
                         ) {
                             exhausted = true;
                             break;
@@ -653,10 +674,10 @@ fn solve(
                             if !push_limited(
                                 &mut best_trees,
                                 limit,
-                                Node::Repeat {
+                                Rc::new(Node::Repeat {
                                     word: word.clone(),
-                                    no: Box::new(n.clone()),
-                                },
+                                    no: Rc::clone(n),
+                                }),
                             ) {
                                 exhausted = true;
                                 break;
@@ -669,10 +690,10 @@ fn solve(
                             if !push_limited(
                                 &mut best_trees,
                                 limit,
-                                Node::Repeat {
+                                Rc::new(Node::Repeat {
                                     word: word.clone(),
-                                    no: Box::new(n.clone()),
-                                },
+                                    no: Rc::clone(n),
+                                }),
                             ) {
                                 exhausted = true;
                                 break;
@@ -1867,7 +1888,7 @@ fn solve(
 
     let sol = Solution {
         cost: best_cost.expect("At least one tree must be found"),
-        trees: best_trees,
+        trees: best_trees.into_vec(),
         exhausted,
     };
     memo.insert(key, sol.clone());
@@ -2899,7 +2920,7 @@ mod tests {
         let with_repeat = minimal_trees(&data, true, true);
         let without_repeat = minimal_trees(&data, false, true);
         assert!(with_repeat.cost < without_repeat.cost);
-        assert!(matches!(with_repeat.trees[0], Node::Repeat { .. }));
+        assert!(matches!(&*with_repeat.trees[0], Node::Repeat { .. }));
     }
 
     #[test]
@@ -3084,30 +3105,30 @@ mod tests {
                 word_count: 4
             }
         );
-        match &sol.trees[0] {
+        match &*sol.trees[0] {
             Node::Split { letter: 'l', yes, no } => {
                 assert_eq!(leaves(no), vec!["book".to_string()]);
-                match &**yes {
-                    Node::SoftDoubleLetterSplit {
-                        test_letter,
-                        requirement_letter,
-                        yes,
-                        no,
-                    } => {
-                        let pair = (*test_letter, *requirement_letter);
-                        assert!(
-                            pair == ('l', 'o') || pair == ('o', 'l'),
-                            "expected letters l/o in some order, got {pair:?}"
-                        );
-                        let mut yes_leaves = leaves(yes);
-                        yes_leaves.sort();
-                        assert_eq!(yes_leaves, vec!["ball".to_string(), "tall".to_string()]);
+                if let Node::SoftDoubleLetterSplit {
+                    test_letter,
+                    requirement_letter,
+                    yes: yes_branch,
+                    no: no_branch,
+                } = &**yes
+                {
+                    let pair = (*test_letter, *requirement_letter);
+                    assert!(
+                        pair == ('l', 'o') || pair == ('o', 'l'),
+                        "expected letters l/o in some order, got {pair:?}"
+                    );
+                    let mut yes_leaves = leaves(yes_branch);
+                    yes_leaves.sort();
+                    assert_eq!(yes_leaves, vec!["ball".to_string(), "tall".to_string()]);
 
-                        let mut no_leaves = leaves(no);
-                        no_leaves.sort();
-                        assert_eq!(no_leaves, vec!["pool".to_string()]);
-                    }
-                    other => panic!("expected SoftDoubleLetterSplit after 'l' split, got {other:?}"),
+                    let mut no_leaves = leaves(no_branch);
+                    no_leaves.sort();
+                    assert_eq!(no_leaves, vec!["pool".to_string()]);
+                } else {
+                    panic!("expected SoftDoubleLetterSplit after 'l' split, got {:?}", &**yes);
                 }
             }
             other => panic!("expected leading 'l' hard split, got {other:?}"),
@@ -3130,7 +3151,7 @@ mod tests {
                 word_count: 2
             }
         );
-        match &sol.trees[0] {
+        match &*sol.trees[0] {
             Node::SoftMirrorPosSplit {
                 test_letter,
                 test_index,
