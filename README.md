@@ -94,5 +94,4 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 * further performance optimizations?
 * further subtleties (soft no):
   * introduce sounds-based subtleties
-  * ensure contain soft do cover reciprocals (E/I and I/E)
 * ensure we respect constraints
