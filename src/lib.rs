@@ -368,19 +368,37 @@ fn single_word_from_mask(mask: u16, words: &[String]) -> Option<String> {
 
 /// Return all letter indices that produce a true partition of `mask` with the given per-letter masks.
 /// Each item is (letter_index, yes_mask, no_mask).
-fn partitions(mask: u16, masks: &[u16; 26]) -> Vec<(usize, u16, u16)> {
-    masks
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &letter_mask)| {
-            let yes = mask & letter_mask;
-            if yes == 0 || yes == mask {
-                None
-            } else {
-                Some((idx, yes, mask & !letter_mask))
+struct Partitions<'a> {
+    masks: &'a [u16; 26],
+    mask: u16,
+    idx: usize,
+}
+
+impl<'a> Iterator for Partitions<'a> {
+    type Item = (usize, u16, u16);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.idx < 26 {
+            let current_idx = self.idx;
+            self.idx += 1;
+            let letter_mask = self.masks[current_idx];
+            let yes = self.mask & letter_mask;
+            if yes == 0 || yes == self.mask {
+                continue;
             }
-        })
-        .collect()
+            let no = self.mask & !letter_mask;
+            return Some((current_idx, yes, no));
+        }
+        None
+    }
+}
+
+fn partitions(mask: u16, masks: &[u16; 26]) -> Partitions<'_> {
+    Partitions {
+        masks,
+        mask,
+        idx: 0,
+    }
 }
 
 fn split_allowed(constraints: &Constraints, primary_idx: usize, secondary_idx: usize) -> bool {
