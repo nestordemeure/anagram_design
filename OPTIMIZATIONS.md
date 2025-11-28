@@ -48,6 +48,7 @@ Current commit: 9465242
 - Branch: `optim-reduce-cloning`.  
 - Change: store child pointers as `Rc<Node>` and return `Vec<Rc<Node>>` from the solver to share subtrees and avoid deep cloning when enumerating optimal trees.  
 - Build: `cargo build --release --quiet`  
+- Tests: `cargo test --quiet` (all pass).  
 - Timing command: `/usr/bin/time -f "%e" cargo run --release --quiet >/dev/null`  
 - Runs (6x): 2.45s, 2.51s, 2.43s, 2.42s, 2.37s, 2.46s  
 - Result: **min runtime = 2.37s** (baseline 12.71s) → ~10.34s faster (~81%).  
