@@ -87,3 +87,13 @@ Current commit: 9465242
 - Runs (6x): 2.20s, 2.21s, 2.17s, 2.18s, 2.16s, 2.16s  
 - Result: **min runtime = 2.16s** (new baseline).  
 - Notes: ~3.6% faster than 2.24s baseline; safe even if tree cap increases because `SmallVec` spills to heap beyond inline capacity.
+
+### Hashbrown memo (revisited on fast baseline)
+- Branch: `optim-fast-hash-again` (from `optim-smallvec`).  
+- Change: swap std `HashMap` for `hashbrown::HashMap` in the memo table (fast hash).  
+- Build: `cargo build --release --quiet`  
+- Tests: `cargo test --quiet` (all pass).  
+- Timing command: `/usr/bin/time -f "%e" cargo run --release --quiet >/dev/null`  
+- Runs (6x): 1.89s, 1.93s, 1.86s, 1.85s, 1.88s, 1.91s  
+- Result: **min runtime = 1.85s** (baseline was 2.16s) → ~14% faster.  
+- Notes: On the optimized base, the faster hasher shows a clear win; worth keeping.

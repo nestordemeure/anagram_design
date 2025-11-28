@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::rc::Rc;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use smallvec::SmallVec;
 
 #[cfg(target_arch = "wasm32")]
