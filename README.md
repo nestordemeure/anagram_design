@@ -1,6 +1,6 @@
-# Annagram Design
+# Anagram Design
 
-Minimal-cost “annagram” trees for a set of words, implemented in Rust.
+Minimal-cost “anagram” trees for a set of words, implemented in Rust.
 
 ## Model
 
