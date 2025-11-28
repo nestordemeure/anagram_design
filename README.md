@@ -47,6 +47,18 @@ That rule has one exeption:
 
 There is already some (imperfect and incomplete) logic around those rules in the code, but it needs to be unified to both simplify it and ensure correctness and exhaustivity across operations.
 
+## Code Structure
+
+The codebase is organized into focused modules:
+- **cost.rs** — Cost struct and comparison logic
+- **node.rs** — Node enum variants and combinators
+- **constraints.rs** — Letter constraint rules and soft-no pairs
+- **context.rs** — Word masks and partition iterators
+- **solver.rs** — Core recursive solver algorithm
+- **format.rs** — ASCII tree rendering
+- **api.rs** — Public API (`minimal_trees`, `minimal_trees_limited`)
+- **wasm.rs** — WebAssembly bindings (conditional)
+
 ## Running
 
 ```bash
@@ -90,8 +102,6 @@ UI features:
 To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled `pkg/` assets are served alongside `index.html`.
 
 ## TODO
-
-* break project into more files
 
 * make hard soft constraints more printipled: all soft constraints have a hard equivalent, some hard ones have several soft ones
 * add another exption to the "do not use the letter" rule (around first actually second)
