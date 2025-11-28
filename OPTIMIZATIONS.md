@@ -72,3 +72,8 @@ Current commit: 9465242
 - Branch: `optim-letters-present-cache` (discarded).  
 - Change: precompute `present_letters` for all masks and reuse in solver key/constraint pruning.  
 - Timing runs showed a slowdown vs baseline; not kept.
+
+### Store word indices instead of Strings (abandoned for now)
+- Branch: none (exploration started on `optim-combined`, reverted).  
+- Idea: replace leaf/repeat payloads with word indices to cut string cloning and shrink trees.  
+- Status: refactor touched large rendering/test surface; rolled back before benchmarking. Could revisit later with a dedicated branch and staged steps (e.g., add index-based nodes while keeping formatting compatibility via word table).
