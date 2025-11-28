@@ -94,3 +94,8 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 * further performance optimizations?
 * further subtleties (soft no):
   * introduce sounds-based subtleties
+* introduce tree navigator / picker
+  requires a representation that lets us stores all the optimal results produced in a single tree (some nodes having several values/children that can be picked)
+  that representation need to be able to be sent to javascript
+  and in javascirpt we ned to be able to click on a node with various values (those should be denoted) in order to select our favorite ones
+  it should remember what we pick so that, when picking away and back, we do not have to reselect everything
