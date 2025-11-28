@@ -9,6 +9,7 @@
     :root {
       --pre-bg: #111827;
       --pre-fg: #e5e7eb;
+      --choice-color: #60a5fa;
     }
     pre {
       background: var(--pre-bg);
@@ -23,6 +24,23 @@
     }
     .trees > article {
       margin-bottom: 1rem;
+    }
+    .choice-node {
+      color: var(--choice-color);
+      font-weight: bold;
+      cursor: pointer;
+      text-decoration: underline dotted;
+      transition: color 0.2s ease;
+    }
+    .choice-node:hover {
+      color: #93c5fd;
+    }
+    .choice-dropdown {
+      font-family: inherit;
+      font-size: 0.9rem;
+    }
+    .dropdown-item {
+      transition: background-color 0.15s ease;
     }
   </style>
 </head>

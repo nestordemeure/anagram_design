@@ -378,6 +378,10 @@ function __wbg_get_imports() {
         const ret = result;
         return ret;
     };
+    imports.wbg.__wbg_fromCodePoint_a9176a674cd93db9 = function() { return handleError(function (arg0) {
+        const ret = String.fromCodePoint(arg0 >>> 0);
+        return addHeapObject(ret);
+    }, arguments) };
     imports.wbg.__wbg_buffer_ccaed51a635d8a2d = function(arg0) {
         const ret = getObject(arg0).buffer;
         return addHeapObject(ret);

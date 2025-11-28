@@ -6,6 +6,7 @@ pub mod context;
 pub mod solver;
 pub mod format;
 pub mod api;
+pub mod merged;
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
@@ -15,6 +16,7 @@ pub use cost::{Cost, compare_costs};
 pub use node::{Node, NodeRef, Solution};
 pub use format::format_tree;
 pub use api::{minimal_trees, minimal_trees_limited};
+pub use merged::{MergedNode, MergedOption, NodeInfo};
 
 // Re-export WASM bindings (they have their own #[wasm_bindgen] attributes)
 #[cfg(target_arch = "wasm32")]

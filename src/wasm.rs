@@ -3,8 +3,8 @@ use serde_wasm_bindgen::{from_value, to_value};
 use wasm_bindgen::prelude::*;
 
 use crate::node::Solution;
-use crate::format::format_tree;
 use crate::api::minimal_trees_limited;
+use crate::merged::MergedNode;
 
 #[derive(Serialize)]
 struct WasmCostSummary {
@@ -21,7 +21,7 @@ struct WasmCostSummary {
 #[derive(Serialize)]
 struct WasmSolution {
     cost: WasmCostSummary,
-    trees: Vec<String>,
+    merged_tree: MergedNode,
     exhausted: bool,
 }
 
@@ -43,6 +43,9 @@ fn summary_from_solution(sol: &Solution) -> WasmSolution {
         sol.cost.sum_nos as f32 / word_count as f32
     };
 
+    // Merge all optimal trees into a single navigable structure
+    let merged_tree = MergedNode::merge(&sol.trees);
+
     WasmSolution {
         cost: WasmCostSummary {
             max_hard_nos: sol.cost.hard_nos,
@@ -54,7 +57,7 @@ fn summary_from_solution(sol: &Solution) -> WasmSolution {
             avg_hard_nos,
             avg_nos,
         },
-        trees: sol.trees.iter().map(|t| format_tree(t)).collect(),
+        merged_tree,
         exhausted: sol.exhausted,
     }
 }
