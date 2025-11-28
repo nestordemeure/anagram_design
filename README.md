@@ -93,12 +93,6 @@ python3 -m http.server 8000 --directory docs             # then open http://loca
 
 Use `wasm-bindgen-cli 0.2.95` to match the pinned crate version (or update both in lockstep).
 
-UI features:
-- Word list textarea (defaults to the Zodiac signs)
-- Toggle `Allow repeat` and `Prioritize soft-no`
-- Limit the number of stored optimal trees (0 = unlimited)
-- ASCII render of each top tree plus cost summary
-
 To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled `pkg/` assets are served alongside `index.html`.
 
 ## TODO
