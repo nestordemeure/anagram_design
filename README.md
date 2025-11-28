@@ -91,7 +91,7 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* is depth actually discriminant in the cost function?
+* break project into more files
 
 * make hard soft constraints more printipled: all soft constraints have a hard equivalent, some hard ones have several soft ones
 * add another exption to the "do not use the letter" rule (around first actually second)
