@@ -16,7 +16,7 @@ Nodes are yes/no questions that partition the word set:
   - Positional mirror soft: mirror the same letter between start/end positions: `First letter 'a'? (all No have 'a' last)`, `Second letter 'a'? (all No have 'a' second-to-last)`, `Third letter 'a'? (all No have 'a' third-to-last)`, plus the reverse direction (last→first, etc.).
   - Double-letter soft: `Double 'o'? (all No double 'l')` — Yes branch has two of the test letter; No branch has two of a different uniform letter.
   - A No edge adds 1 to `nos` only.
-- **Leaves / Repeat** (only when exactly two words): cost `(0,0,0,0,0)`.
+- **Leaves / Repeat**: at any point you can "name" a specific word; Yes resolves it, No continues with the rest (with repeat disabled below). Adds 0 `nos`/`hard_nos` and 1 `depth`.
 
 ### Cost (lexicographically minimized)
 1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches).
@@ -33,7 +33,7 @@ Only the first 5 optimal trees are stored/displayed; truncation is noted but opt
 cargo run --quiet
 ```
 
-The binary prints the optimal trees for the Zodiac word set twice, once allowing `Repeat` nodes and once disalowing them.
+The binary prints the optimal trees for the Zodiac word set twice, once allowing `Repeat` nodes and once disallowing them.
 
 ## Testing
 
@@ -71,6 +71,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* further optimizations?
-* soft no:
-  * introduce sounds and not just letters?
+* further performance optimizations?
+* further subtleties (soft no):
+  * introduce sounds-based subtleties

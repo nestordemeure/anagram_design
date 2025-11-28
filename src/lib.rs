@@ -72,7 +72,11 @@ impl PartialOrd for Cost {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Node {
     Leaf(String),
-    Repeat(String, String),
+    /// Ask directly for a specific word; Yes resolves that word, No continues with the rest.
+    Repeat {
+        word: String,
+        no: Box<Node>,
+    },
     Split {
         letter: char,
         yes: Box<Node>,
@@ -330,20 +334,6 @@ fn partitions(mask: u16, masks: &[u16; 26]) -> Vec<(usize, u16, u16)> {
         .collect()
 }
 
-fn two_words_from_mask(mask: u16, words: &[String]) -> Option<(String, String)> {
-    if mask_count(mask) != 2 {
-        return None;
-    }
-    let first = mask.trailing_zeros() as usize;
-    let second_mask = mask & !(1u16 << first);
-    let second = second_mask.trailing_zeros() as usize;
-    if second < words.len() {
-        Some((words[first].clone(), words[second].clone()))
-    } else {
-        None
-    }
-}
-
 fn combine_children(letter: char, left: &Node, right: &Node) -> Node {
     Node::Split {
         letter,
@@ -498,19 +488,101 @@ fn solve(
     let mut best_trees: Vec<Node> = Vec::new();
     let mut exhausted = false;
 
-    // Repeat node option for exactly two words
-    if allow_repeat && count == 2 {
-        if let Some((w1, w2)) = two_words_from_mask(mask, ctx.words) {
-            best_cost = Some(Cost {
+    // Repeat node option: directly guess a specific word; Yes resolves that word, No continues.
+    if allow_repeat && count >= 2 {
+        for (idx, word) in ctx
+            .words
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| mask & (1u16 << idx) != 0)
+        {
+            let no_mask = mask & !(1u16 << idx);
+            // Repeat can only be used once along a path: after guessing this word,
+            // the remaining subtree must proceed without further repeats.
+            let no_sol = solve(
+                no_mask,
+                ctx,
+                false, // disable repeat for descendants
+                prioritize_soft_no,
+                known_letters,
+                limit,
+                memo,
+            );
+
+            let yes_cost = Cost {
                 nos: 0,
                 hard_nos: 0,
                 sum_nos: 0,
                 sum_hard_nos: 0,
                 depth: 0,
-                word_count: 2,
-            });
-            if !push_limited(&mut best_trees, limit, Node::Repeat(w1, w2)) {
-                exhausted = true;
+                word_count: 1,
+            };
+
+            let branch_cost = Cost {
+                nos: no_sol.cost.nos.max(yes_cost.nos),
+                hard_nos: no_sol.cost.hard_nos.max(yes_cost.hard_nos),
+                sum_nos: yes_cost.sum_nos + no_sol.cost.sum_nos,
+                sum_hard_nos: yes_cost.sum_hard_nos + no_sol.cost.sum_hard_nos,
+                depth: std::cmp::max(yes_cost.depth, no_sol.cost.depth) + 1,
+                word_count: yes_cost.word_count + no_sol.cost.word_count,
+            };
+
+            match best_cost {
+                None => {
+                    best_cost = Some(branch_cost);
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            &mut best_trees,
+                            limit,
+                            Node::Repeat {
+                                word: word.clone(),
+                                no: Box::new(n.clone()),
+                            },
+                        ) {
+                            exhausted = true;
+                            break;
+                        }
+                    }
+                    exhausted = exhausted || no_sol.exhausted;
+                }
+                Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no) {
+                    Ordering::Less => {
+                        best_trees.clear();
+                        best_cost = Some(branch_cost);
+                        exhausted = false;
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                Node::Repeat {
+                                    word: word.clone(),
+                                    no: Box::new(n.clone()),
+                                },
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        exhausted = exhausted || no_sol.exhausted;
+                    }
+                    Ordering::Equal => {
+                        for n in &no_sol.trees {
+                            if !push_limited(
+                                &mut best_trees,
+                                limit,
+                                Node::Repeat {
+                                    word: word.clone(),
+                                    no: Box::new(n.clone()),
+                                },
+                            ) {
+                                exhausted = true;
+                                break;
+                            }
+                        }
+                        exhausted = exhausted || no_sol.exhausted;
+                    }
+                    Ordering::Greater => {}
+                },
             }
         }
     }
@@ -1968,13 +2040,20 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(&capitalize_first(w));
                 out.push('\n');
             }
-            Node::Repeat(a, b) => {
+            Node::Repeat { word, no } => {
                 out.push_str(prefix);
-                out.push_str("└─ No: Repeat: ");
-                out.push_str(&capitalize_first(a));
-                out.push_str(" / ");
-                out.push_str(&capitalize_first(b));
-                out.push('\n');
+                out.push_str("└─ No: Repeat ");
+                out.push_str(&capitalize_first(word));
+                out.push_str(", ");
+                out.push_str(&capitalize_first(word));
+                out.push_str(", ");
+                out.push_str(&capitalize_first(word));
+                out.push_str("...\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                render_no_branch(no, &format!("{}│", child_prefix), out);
+
+                render_yes_final(&Node::Leaf(word.clone()), &child_prefix, out);
             }
             Node::Split { letter, yes, no } => {
                 // No branch that contains another split
@@ -2120,13 +2199,25 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(&capitalize_first(w));
                 out.push('\n');
             }
-            Node::Repeat(a, b) => {
+            Node::Repeat { word, no } => {
                 out.push_str(prefix);
-                out.push_str("└─ Repeat: ");
-                out.push_str(&capitalize_first(a));
-                out.push_str(" / ");
-                out.push_str(&capitalize_first(b));
-                out.push('\n');
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str("Repeat ");
+                out.push_str(&capitalize_first(word));
+                out.push_str(", ");
+                out.push_str(&capitalize_first(word));
+                out.push_str(", ");
+                out.push_str(&capitalize_first(word));
+                out.push_str("...\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(&Node::Leaf(word.clone()), prefix, out);
             }
             Node::Split { letter, yes, no } => {
                 // For a split in the Yes position, continue the spine pattern
@@ -2314,15 +2405,22 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(&capitalize_first(w));
                 out.push('\n');
             }
-            Node::Repeat(a, b) => {
-                let connector = if is_final { "└─ " } else { "├─ " };
+            Node::Repeat { word, no } => {
                 out.push_str(prefix);
-                out.push_str(connector);
-                out.push_str("Repeat: ");
-                out.push_str(&capitalize_first(a));
-                out.push_str(" / ");
-                out.push_str(&capitalize_first(b));
-                out.push('\n');
+                out.push_str("Repeat ");
+                out.push_str(&capitalize_first(word));
+                out.push_str(", ");
+                out.push_str(&capitalize_first(word));
+                out.push_str(", ");
+                out.push_str(&capitalize_first(word));
+                out.push_str("...\n");
+
+                render_no_branch(no, &format!("{}│", prefix), out);
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_spine(&Node::Leaf(word.clone()), prefix, is_final, out);
             }
             Node::Split { letter, yes, no } => {
                 // Print the question
@@ -2507,6 +2605,33 @@ mod tests {
         list.iter().map(|s| s.to_string()).collect()
     }
 
+    fn leaves(node: &Node) -> Vec<String> {
+        fn walk(node: &Node, out: &mut Vec<String>) {
+            match node {
+                Node::Leaf(w) => out.push(w.clone()),
+                Node::Repeat { word, no } => {
+                    out.push(word.clone());
+                    walk(no, out);
+                }
+                Node::Split { yes, no, .. }
+                | Node::SoftSplit { yes, no, .. }
+                | Node::FirstLetterSplit { yes, no, .. }
+                | Node::SoftFirstLetterSplit { yes, no, .. }
+                | Node::LastLetterSplit { yes, no, .. }
+                | Node::SoftLastLetterSplit { yes, no, .. }
+                | Node::SoftMirrorPosSplit { yes, no, .. }
+                | Node::SoftDoubleLetterSplit { yes, no, .. } => {
+                    walk(yes, out);
+                    walk(no, out);
+                }
+            }
+        }
+
+        let mut out = Vec::new();
+        walk(node, &mut out);
+        out
+    }
+
     #[test]
     fn compare_costs_prioritization_flips() {
         use std::cmp::Ordering;
@@ -2549,14 +2674,25 @@ mod tests {
                 depth: 0,
                 word_count: 1,
             },
-            Node::Repeat(_, _) => Cost {
-                nos: 0,
-                hard_nos: 0,
-                sum_nos: 0,
-                sum_hard_nos: 0,
-                depth: 0,
-                word_count: 2,
-            },
+            Node::Repeat { no, .. } => {
+                let yes_cost = Cost {
+                    nos: 0,
+                    hard_nos: 0,
+                    sum_nos: 0,
+                    sum_hard_nos: 0,
+                    depth: 0,
+                    word_count: 1,
+                };
+                let no_cost = compute_cost(no);
+                Cost {
+                    nos: yes_cost.nos.max(no_cost.nos),
+                    hard_nos: yes_cost.hard_nos.max(no_cost.hard_nos),
+                    sum_nos: yes_cost.sum_nos + no_cost.sum_nos,
+                    sum_hard_nos: yes_cost.sum_hard_nos + no_cost.sum_hard_nos,
+                    depth: yes_cost.depth.max(no_cost.depth) + 1,
+                    word_count: yes_cost.word_count + no_cost.word_count,
+                }
+            }
             Node::Split { yes, no, .. }
             | Node::FirstLetterSplit { yes, no, .. }
             | Node::LastLetterSplit { yes, no, .. } => {
@@ -2623,7 +2759,7 @@ mod tests {
         let with_repeat = minimal_trees(&data, true, true);
         let without_repeat = minimal_trees(&data, false, true);
         assert!(with_repeat.cost < without_repeat.cost);
-        assert!(matches!(with_repeat.trees[0], Node::Repeat(_, _)));
+        assert!(matches!(with_repeat.trees[0], Node::Repeat { .. }));
     }
 
     #[test]
@@ -2669,11 +2805,11 @@ mod tests {
         assert_eq!(
             allow_repeat.cost,
             Cost {
-                nos: 3,
+                nos: 2,
                 hard_nos: 0,
-                sum_nos: 16,
+                sum_nos: 14,
                 sum_hard_nos: 0,
-                depth: 5,
+                depth: 7,
                 word_count: 12
             }
         );
@@ -2753,11 +2889,11 @@ mod tests {
         assert_eq!(
             cost,
             Cost {
-                nos: 3,
+                nos: 2,
                 hard_nos: 0,
-                sum_nos: 16,
+                sum_nos: 14,
                 sum_hard_nos: 0,
-                depth: 5,
+                depth: 7,
                 word_count: 12
             }
         );
@@ -2797,34 +2933,45 @@ mod tests {
     fn soft_double_letter_split_works() {
         // Yes: words with double 'o'; No: words with double 'l'
         let data = words(&["book", "pool", "ball", "tall"]);
-        let sol = minimal_trees_limited(&data, true, true, Some(1));
+        let sol = minimal_trees_limited(&data, false, true, Some(1));
         assert_eq!(
             sol.cost,
             Cost {
                 nos: 1,
-                hard_nos: 0,
-                sum_nos: 2,
-                sum_hard_nos: 0,
-                depth: 1,
+                hard_nos: 1,
+                sum_nos: 3,
+                sum_hard_nos: 2,
+                depth: 3,
                 word_count: 4
             }
         );
         match &sol.trees[0] {
-            Node::SoftDoubleLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                let pair = (*test_letter, *requirement_letter);
-                assert!(
-                    pair == ('o', 'l') || pair == ('l', 'o'),
-                    "expected letters o/l in some order, got {pair:?}"
-                );
-                assert!(matches!(**yes, Node::Repeat(_, _)));
-                assert!(matches!(**no, Node::Repeat(_, _)));
+            Node::Split { letter: 'l', yes, no } => {
+                assert_eq!(leaves(no), vec!["book".to_string()]);
+                match &**yes {
+                    Node::SoftDoubleLetterSplit {
+                        test_letter,
+                        requirement_letter,
+                        yes,
+                        no,
+                    } => {
+                        let pair = (*test_letter, *requirement_letter);
+                        assert!(
+                            pair == ('l', 'o') || pair == ('o', 'l'),
+                            "expected letters l/o in some order, got {pair:?}"
+                        );
+                        let mut yes_leaves = leaves(yes);
+                        yes_leaves.sort();
+                        assert_eq!(yes_leaves, vec!["ball".to_string(), "tall".to_string()]);
+
+                        let mut no_leaves = leaves(no);
+                        no_leaves.sort();
+                        assert_eq!(no_leaves, vec!["pool".to_string()]);
+                    }
+                    other => panic!("expected SoftDoubleLetterSplit after 'l' split, got {other:?}"),
+                }
             }
-            other => panic!("expected SoftDoubleLetterSplit root, got {other:?}"),
+            other => panic!("expected leading 'l' hard split, got {other:?}"),
         }
     }
 
