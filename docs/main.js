@@ -14,6 +14,17 @@ const wasmReady = init();
 // LocalStorage key for storing user choices
 const STORAGE_KEY = "anagram_tree_choices";
 
+// Auto-resize textarea based on content
+function autoResizeTextarea() {
+  wordsField.style.height = 'auto';
+  wordsField.style.height = wordsField.scrollHeight + 'px';
+}
+
+// Set up auto-resize on input
+wordsField.addEventListener('input', autoResizeTextarea);
+// Initial resize
+autoResizeTextarea();
+
 function setStatus(message, tone = "neutral") {
   statusEl.textContent = message;
   statusEl.dataset.tone = tone;
@@ -35,6 +46,7 @@ function parseWords() {
 
 function setWords(words) {
   wordsField.value = words.join("\n");
+  autoResizeTextarea();
 }
 
 // Get user's selected option index for a given tree path (default to 0)
