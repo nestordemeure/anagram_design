@@ -24,6 +24,11 @@ Current commit: 9465242
 3) Reduce tree cloning in solver (share nodes / defer materialization).  
 4) Cache `letters_present` per mask or thread it down to cut repeated scans.
 
+## Baseline Philosophy
+- Always benchmark on top of the current fastest code; the baseline evolves as improvements land.  
+- Each experiment: build release once, run 6 timed executions, take the minimum; run tests.  
+- Record when an idea is discarded to avoid repeating unhelpful paths.
+
 ## Attempts
 
 ### Cheaper hashing for memo table
@@ -43,3 +48,27 @@ Current commit: 9465242
 - Runs (6x): 12.16s, 12.63s, 12.73s, 13.00s, 12.80s, 12.89s  
 - Result: **min runtime = 12.16s** (baseline 12.71s) → ~0.55s improvement (~4.3%).  
 - Notes: Small but consistent gain; zero-allocation partition iteration seems worthwhile.
+
+### Reduce tree cloning (Rc children)
+- Branch: `optim-reduce-cloning`.  
+- Change: store child pointers as `Rc<Node>` and return `Vec<Rc<Node>>` from the solver to share subtrees and avoid deep cloning when enumerating optimal trees.  
+- Build: `cargo build --release --quiet`  
+- Tests: `cargo test --quiet` (all pass).  
+- Timing command: `/usr/bin/time -f "%e" cargo run --release --quiet >/dev/null`  
+- Runs (6x): 2.45s, 2.51s, 2.43s, 2.42s, 2.37s, 2.46s  
+- Result: **min runtime = 2.37s** (baseline 12.71s) → ~10.34s faster (~81%).  
+- Notes: Large speedup from eliminating repeated full-tree cloning; keeps public API behavior the same (formatting still works).
+
+### Combined Rc + partition iterator (current baseline)
+- Branch: `optim-combined` (merged `optim-reduce-cloning` + `optim-partition-reuse`).  
+- Build: `cargo build --release --quiet`  
+- Tests: `cargo test --quiet` (all pass).  
+- Timing command: `/usr/bin/time -f "%e" cargo run --release --quiet >/dev/null`  
+- Runs (6x): 2.36s, 2.25s, 2.31s, 2.24s, 2.30s, 2.32s  
+- Result: **min runtime = 2.24s** (new baseline).  
+- Notes: This is the platform for future experiments.
+
+### Cache letters_present per mask (discarded)
+- Branch: `optim-letters-present-cache` (discarded).  
+- Change: precompute `present_letters` for all masks and reuse in solver key/constraint pruning.  
+- Timing runs showed a slowdown vs baseline; not kept.
