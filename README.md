@@ -108,7 +108,3 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 * further subtleties (mew soft constraints):
   * introduce sounds-based subtleties
-
-* default to computing all optimal trees
-* move cost to below the tree, put hard numbers in bold in the cost
-* have dropdown nodes in white instead of blue? and not underlined?

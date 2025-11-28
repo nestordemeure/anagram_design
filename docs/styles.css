@@ -1,0 +1,63 @@
+:root {
+  --pre-bg: #111827;
+  --pre-fg: #e5e7eb;
+  --choice-color: #60a5fa;
+}
+
+pre {
+  background: var(--pre-bg);
+  color: var(--pre-fg);
+  padding: 1rem;
+  white-space: pre;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  border-radius: var(--pico-border-radius);
+}
+
+#status {
+  min-height: 1.25rem;
+}
+
+.trees > article {
+  margin-bottom: 1rem;
+}
+
+.choice-node {
+  color: var(--choice-color);
+  font-weight: bold;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.choice-node:hover {
+  color: #93c5fd;
+}
+
+.choice-dropdown {
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.dropdown-item {
+  transition: background-color 0.15s ease;
+}
+
+/* Style for instruction text to match choice nodes */
+.choice-hint {
+  color: var(--choice-color);
+  font-weight: bold;
+}
+
+/* Remove extra spacing at bottom of form */
+#solver-form > .grid:last-of-type {
+  margin-bottom: 0;
+}
+
+/* Reduce spacing between form and results */
+section + section {
+  margin-top: 0;
+}
+
+/* Status paragraph takes no space when empty */
+#status:empty {
+  display: none;
+}

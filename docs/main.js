@@ -365,17 +365,12 @@ function renderResult(result) {
   window.currentResult = result; // Store for re-rendering
 
   const { cost, merged_tree: mergedTree, exhausted } = result;
-  const summaryText = `
-    Maximum number of "No" answers: ${cost.max_nos} (average: ${cost.avg_nos.toFixed(2)}) ·
-    Maximum number of unjustified "No" answers: ${cost.max_hard_nos} (average: ${cost.avg_hard_nos.toFixed(2)})
-  `;
-  summaryEl.innerHTML = `<p>${summaryText}</p>`;
 
   const { html, choices } = renderMergedTree(mergedTree);
 
   const hasChoices = choices.length > 0;
   const instruction = hasChoices
-    ? `<p><em>Click on <strong>bold nodes ▼</strong> to pick alternative options.</em></p>`
+    ? `<p><em>Click on <span class="choice-hint">blue nodes ▼</span> to pick alternative options.</em></p>`
     : "";
 
   treesEl.innerHTML = `
@@ -391,6 +386,13 @@ function renderResult(result) {
       `<p><small>Results were truncated; more optimal trees exist beyond the requested limit.</small></p>`
     );
   }
+
+  // Cost summary goes below the tree
+  const summaryText = `
+    Maximum number of "No" answers: ${cost.max_nos} (average: ${cost.avg_nos.toFixed(2)}) ·
+    Maximum number of unjustified "No" answers: ${cost.max_hard_nos} (average: ${cost.avg_hard_nos.toFixed(2)})
+  `;
+  summaryEl.innerHTML = `<p>${summaryText}</p>`;
 
   // Attach click handlers to choice nodes
   attachChoiceHandlers(choices);
