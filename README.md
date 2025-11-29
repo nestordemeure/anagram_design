@@ -8,34 +8,23 @@ The codebase is organized into focused modules:
 - **cost.rs** — Cost struct and comparison logic
 - **node.rs** — Node enum variants and combinators
 - **constraints.rs** — Letter constraint rules and soft-no pairs
-- **context.rs** — Word masks and partition iterators (supports up to 32 words via u32 bitmasks)
+- **context.rs** — Word masks and partition iterators
 - **dijkstra_solver.rs** — Cost-guided recursive solver with memoization
 - **format.rs** — ASCII tree rendering
-- **api.rs** — Public API (`minimal_trees`, `minimal_trees_limited`)
-- **wasm.rs** — WebAssembly bindings (conditional)
+- **api.rs** — Public API
+- **wasm.rs** — WebAssembly
 
-## Model
+## Theory
 
-Nodes are yes/no questions that partition the word set:
-- **Hard splits**
-  - `Contains 'x'?`
-  - `First letter 'x'?`
-  - `Last letter 'x'?`
-  - A No edge adds 1 to both `nos` and `hard_nos`.
-- **Soft splits**
-  - Contains soft: `Contains 'i'? (all No contain 'e')` for defined pairs (E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R).
-  - Positional soft: `First letter 'a'? (all No have 'a' second)` and `Last letter 's'? (all No have 's' second-to-last)`.
-  - Positional mirror soft: mirror the same letter between start/end positions: `First letter 'a'? (all No have 'a' last)`, `Second letter 'a'? (all No have 'a' second-to-last)`, `Third letter 'a'? (all No have 'a' third-to-last)`, plus the reverse direction (last→first, etc.).
-  - Double-letter soft: `Double 'o'? (all No double 'l')` — Yes branch has two of the test letter; No branch has two of a different uniform letter.
-  - A No edge adds 1 to `nos` only.
-- **Leaves / Repeat**: at any point you can "name" a specific word; Yes resolves it, No continues with the rest (with repeat disabled below). Adds 0 `nos`/`hard_nos` and 1 `depth`.
+Nodes are yes/no questions that partition the word set. Each split has a **hard** baseline (primary = secondary letter) and **soft** variants (primary ≠ secondary).
 
-### Splits (rewamped and systematized)
+### Splits
 
-Some letters have reciprocals, other letters with which they might get confused: E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R (those relations go both ways: E is the reciprocal of I, and I is the reciprocal of E).
-In this section we will call `A` a random letter, `A-` its reciprocal, and `B` any other random letter.
+**Reciprocal pairs**: E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R (bidirectional).
 
-Splits (with the exception of Leaves and Repeat) all have hard baseline, and soft variants (note the use of reciprocal to create soft variant, as well as the use of nearby position, and mirror positions):
+In the list below, `A` represents any letter, `A-` its reciprocal, and `B` any other letter.
+Soft variants use reciprocals, nearby positions, or mirror positions:
+
 * `Contains 'A'?`
   * `(all No contain 'A-')`
 * `First letter 'A'?`
@@ -69,68 +58,66 @@ Splits (with the exception of Leaves and Repeat) all have hard baseline, and sof
 * `Triple 'A'?`
   * `(all No have triple 'B')`
 
+### Leaves and Repeat
+
+- **Leaf**: Names a specific word. Yes branch resolves it; No branch continues with remaining words.
+- **Repeat**: Like Leaf, but re-enables the same word in descendants (disabled by default after first use).
+
 ### Constraints
 
-Splits (except Leaves and Repeat) have a primary letter and a secondary letter.
+Splits (except Leaves and Repeat) use a **primary letter P** and **secondary letter S**. When a split uses P and S:
+- P is **touched** in both branches (yes and no)
+- S is **touched** only in the no branch
 
-**Hard splits**: Primary letter P equals secondary letter (the letter being tested).
-**Soft splits**: Primary letter P (for yes branch) differs from secondary letter S (for no branch).
+Descendants cannot use touched letters as their primary or secondary, with these exceptions:
 
-#### Touched Letters
-
-When a split uses primary P and secondary S:
-- P is **touched** in both branches (yes and no).
-- S is **touched** only in the no branch.
-
-Descendants cannot use touched letters as their primary or secondary, except where noted below.
-
-#### Basic Rule
-
-- **Yes branch**: P is touched; S is untouched (can be used as primary or secondary).
-- **No branch**: Both P and S are touched (neither can be used).
-
-#### Exceptions (Immediate Children Only)
-
-There are three split **classes**: Contains → Positional (first/second/third/last/etc.) → Double/Triple.
+**Split classes**: Contains → Positional (first/second/third/last/etc.) → Double/Triple.
 
 Immediate children may use touched letters as primary when moving **same-class or downward**:
-- After a **Contains 'P'?**, the yes-branch child can use P as primary (for another Contains, any positional, or Double/Triple).
-- After a **soft Contains 'P'? (all No contain 'S')**, the no-branch child can use S as primary (same movement rules).
-- After a **Positional 'P'**, the yes-branch child can use P as primary if it's another positional (same or different position), Double, or Triple, **provided the two positions don't refer to the same absolute index in a word**.
-- After a **soft Positional 'P'? (no-branch constraint uses 'S')**, the no-branch child can use S as primary if it's another positional, Double, or Triple, **provided the two positions don't refer to the same absolute index in a word**.
-- After a **Double/Triple 'P'**, children can use P as primary if they are also Double or Triple.
+- After **Contains 'P'?**, the yes-branch child can use P as primary (for another Contains, any positional, or Double/Triple)
+- After **soft Contains 'P'? (all No contain 'S')**, the no-branch child can use S as primary (same rules)
+- After **Positional 'P'**, the yes-branch child can use P as primary if it's another positional, Double, or Triple, **provided the two positions don't refer to the same absolute index**
+- After **soft Positional 'P'?**, the no-branch child can use S as primary (same rules)
+- After **Double/Triple 'P'**, children can use P as primary if they are also Double or Triple
 
 These exceptions **chain**: you can do Contains P → First P → Double P, as long as each step moves same-class or downward.
 
-**Same-Index Restriction**: When chaining positional splits with the same letter, the two positions must not refer to the same absolute index in any word. For example, in a 3-letter word like "Leo", "Second" (index 1) and "Second-to-last" (index 1) refer to the same position, so "Second E?" cannot be followed by "Second-to-last E?" or vice versa.
+**Same-index restriction**: When chaining positional splits with the same letter, the two positions must not refer to the same absolute index in any word. Example: in "Leo" (3 letters), "Second" (index 1) and "Second-to-last" (index 1) refer to the same position, so they cannot be chained.
 
-### Cost (lexicographically minimized)
+### Cost
 
-1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches).
-2. `nos` — max No edges on any path.
-3. `sum_hard_nos` — weighted sum of hard No edges.
-4. `sum_nos` — weighted sum of No edges (words in the No branch each add 1).
-5. `depth` — max tree depth.
+Each node type contributes to cost metrics:
+- **Hard splits** (primary = secondary): No edge adds 1 to both `nos` and `hard_nos`
+- **Soft splits** (primary ≠ secondary): No edge adds 1 to `nos` only
+- **Leaves/Repeat**: Add 1 to `depth` only
 
-Only the first 5 optimal trees are stored/displayed; truncation is noted but optimality still holds.
+Trees are optimized by lexicographically minimizing:
 
-## Running
+1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches)
+2. `nos` — max No edges on any path
+3. `sum_hard_nos` — weighted sum of hard No edges
+4. `sum_nos` — weighted sum of No edges (words in the No branch each add 1)
+5. `depth` — max tree depth
+
+## Usage
+
+### Running
 
 ```bash
 cargo run --quiet
 ```
 
-The binary prints trees for the Zodiac word set, once allowing `Repeat` nodes and once disallowing them.
+Prints four trees for the Zodiac word set, with various options allowed or disabled.
 
-## Testing
+### Testing
 
 ```bash
 cargo test
 ```
 
-Includes regression tests and a Zodiac cost check for both settings.
+Includes regression tests and a Zodiac cost check for several settings.
 
-## Web demo (WASM)
+### Web Demo (WASM)
 
 Build and view the browser UI (uses Pico CSS and the wasm-bindgen JS shim):
 
@@ -152,5 +139,5 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* further subtleties (new soft constraints):
-  * introduce sounds-based subtleties
+* further subtleties:
+  * introduce sounds-based soft splits?
