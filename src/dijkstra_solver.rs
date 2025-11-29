@@ -14,6 +14,9 @@ pub(crate) struct Key {
     mask: Mask,
     forbidden: u32,
     allowed_primary_once: u32,
+    parent_position: Option<Position>,
+    parent_primary: Option<usize>,
+    parent_secondary: Option<usize>,
 }
 
 
@@ -128,6 +131,29 @@ fn generate_position_splits(
         };
 
         for req_position in soft_requirement_positions {
+            // Skip if test position and requirement position can collide for any word in the current mask
+            // This prevents splits like "Second E? (No have E Second-to-last)" on 3-letter words
+            // Check if positions collide for any actual word length in the mask
+            let positions_collide_for_mask = {
+                let mut collides = false;
+                for (word_idx, word) in ctx.words.iter().enumerate() {
+                    if mask & (1 << word_idx) != 0 {
+                        let word_len = word.chars().count();
+                        if let (Some(idx1), Some(idx2)) = (position.to_absolute_index(word_len), req_position.to_absolute_index(word_len)) {
+                            if idx1 == idx2 {
+                                collides = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                collides
+            };
+
+            if positions_collide_for_mask {
+                continue;
+            }
+
             if split_allowed(constraints, idx, idx, position) {
                 let req_masks = get_position_masks(ctx, req_position);
                 if no & req_masks[idx] == no {
@@ -196,6 +222,9 @@ const fn make_key(mask: Mask, constraints: &Constraints) -> Key {
         mask,
         forbidden: constraints.forbidden_primary | constraints.forbidden_secondary,
         allowed_primary_once: constraints.allowed_primary_once,
+        parent_position: constraints.parent_position,
+        parent_primary: constraints.parent_primary,
+        parent_secondary: constraints.parent_secondary,
     }
 }
 

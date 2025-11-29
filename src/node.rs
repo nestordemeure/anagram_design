@@ -30,6 +30,20 @@ impl Position {
             Position::Triple => "triple",
         }
     }
+
+    /// Convert this position to an absolute index (0-based) for a word of given length.
+    /// Returns None if the word is too short for this position or if the position is not positional.
+    pub const fn to_absolute_index(&self, word_length: usize) -> Option<usize> {
+        match *self {
+            Position::Contains | Position::Double | Position::Triple => None,  // Not positional
+            Position::First => if word_length >= 1 { Some(0) } else { None },
+            Position::Second => if word_length >= 2 { Some(1) } else { None },
+            Position::Third => if word_length >= 3 { Some(2) } else { None },
+            Position::Last => if word_length >= 1 { Some(word_length - 1) } else { None },
+            Position::SecondToLast => if word_length >= 2 { Some(word_length - 2) } else { None },
+            Position::ThirdToLast => if word_length >= 3 { Some(word_length - 3) } else { None },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

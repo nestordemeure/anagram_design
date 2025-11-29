@@ -24,6 +24,29 @@ pub fn can_chain_exception(parent_pos: Position, child_pos: Position) -> bool {
     position_class(child_pos) >= position_class(parent_pos)
 }
 
+/// Check if two positions could refer to the same absolute index for any reasonable word length.
+/// This prevents chaining like "Second E" -> "Second-to-last E" on 3-letter words where both
+/// positions refer to index 1.
+pub fn positions_can_collide(pos1: Position, pos2: Position) -> bool {
+    // Only positional splits can collide (Contains, Double, Triple are not positional)
+    if matches!(pos1, Position::Contains | Position::Double | Position::Triple) {
+        return false;
+    }
+    if matches!(pos2, Position::Contains | Position::Double | Position::Triple) {
+        return false;
+    }
+
+    // Check all reasonable word lengths (1-20 covers all practical cases)
+    for len in 1..=20 {
+        if let (Some(idx1), Some(idx2)) = (pos1.to_absolute_index(len), pos2.to_absolute_index(len)) {
+            if idx1 == idx2 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Constraints {
     /// Letters forbidden as primary letters in this subtree
@@ -77,12 +100,20 @@ impl Constraints {
         // Check for chaining exceptions (for continuing chains)
         if let (Some(parent_pos), Some(parent_prim)) = (self.parent_position, self.parent_primary) {
             if idx == parent_prim && can_chain_exception(parent_pos, child_pos) {
+                // Disallow if positions would refer to the same absolute index
+                if positions_can_collide(parent_pos, child_pos) {
+                    return false;
+                }
                 return true;
             }
         }
 
         if let (Some(parent_pos), Some(parent_sec)) = (self.parent_position, self.parent_secondary) {
             if idx == parent_sec && can_chain_exception(parent_pos, child_pos) {
+                // Disallow if positions would refer to the same absolute index
+                if positions_can_collide(parent_pos, child_pos) {
+                    return false;
+                }
                 return true;
             }
         }

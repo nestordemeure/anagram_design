@@ -139,14 +139,15 @@ mod tests {
                 word_count: 12
             }
         );
+        // With same-index restriction, costs are slightly different
         assert_eq!(
             no_repeat.cost,
             Cost {
                 nos: 2,
                 hard_nos: 1,
-                sum_nos: 17,
-                sum_hard_nos: 5,
-                depth: 5,
+                sum_nos: 16,
+                sum_hard_nos: 6,
+                depth: 6,
                 word_count: 12
             }
         );
@@ -245,6 +246,137 @@ mod tests {
                 assert_eq!(*requirement_position, node::Position::Last);
             }
             other => panic!("expected PositionalSplit (first/last mirror) root, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_position_collision_detection() {
+        use node::Position;
+        use constraints::positions_can_collide;
+
+        // Second and Second-to-last collide for 3-letter words
+        assert!(positions_can_collide(Position::Second, Position::SecondToLast),
+            "Second and Second-to-last should collide for 3-letter words");
+
+        // Third and Third-to-last collide for 5-letter words
+        assert!(positions_can_collide(Position::Third, Position::ThirdToLast),
+            "Third and Third-to-last should collide for 5-letter words");
+
+        // First and Last collide for 1-letter words
+        assert!(positions_can_collide(Position::First, Position::Last),
+            "First and Last should collide for 1-letter words");
+
+        // First and Second should never collide
+        assert!(!positions_can_collide(Position::First, Position::Second),
+            "First and Second should never collide");
+
+        // Contains is not positional, so can't collide
+        assert!(!positions_can_collide(Position::Contains, Position::First),
+            "Contains should not collide with positional");
+    }
+
+    #[test]
+    fn test_position_to_absolute_index() {
+        use node::Position;
+
+        // Test 3-letter word (e.g., "Leo")
+        assert_eq!(Position::First.to_absolute_index(3), Some(0));
+        assert_eq!(Position::Second.to_absolute_index(3), Some(1));
+        assert_eq!(Position::Third.to_absolute_index(3), Some(2));
+        assert_eq!(Position::Last.to_absolute_index(3), Some(2));
+        assert_eq!(Position::SecondToLast.to_absolute_index(3), Some(1));
+        assert_eq!(Position::ThirdToLast.to_absolute_index(3), Some(0));
+
+        // Verify Second and SecondToLast map to same index for 3-letter words
+        assert_eq!(
+            Position::Second.to_absolute_index(3),
+            Position::SecondToLast.to_absolute_index(3),
+            "Second and SecondToLast should map to same index (1) for 3-letter words"
+        );
+
+        // Test 5-letter word
+        assert_eq!(Position::Third.to_absolute_index(5), Some(2));
+        assert_eq!(Position::ThirdToLast.to_absolute_index(5), Some(2));
+
+        // Contains/Double/Triple are not positional
+        assert_eq!(Position::Contains.to_absolute_index(5), None);
+        assert_eq!(Position::Double.to_absolute_index(5), None);
+        assert_eq!(Position::Triple.to_absolute_index(5), None);
+    }
+
+    #[test]
+    fn test_same_index_restriction_leo_gemini() {
+        // Test with Leo and Gemini to verify the same-index restriction
+        // Leo: 3 letters (l-e-o), E is at positions Second (index 1) and SecondToLast (index 1)
+        // Gemini: 6 letters (g-e-m-i-n-i), E is at Second (index 1) but SecondToLast is 'n' (index 4)
+        // The solver should NOT be able to chain "Second E?" with "SecondToLast E?" because
+        // they refer to the same index in Leo.
+        let data = words(&["leo", "gemini"]);
+        let sol = minimal_trees(&data, false, true);
+
+        // Check all generated trees to ensure none use the forbidden pattern
+        for (i, tree) in sol.trees.iter().enumerate() {
+            let has_forbidden_pattern = check_tree_for_forbidden_pattern(tree);
+            assert!(!has_forbidden_pattern,
+                "Tree {} should not contain 'Second E' followed by 'SecondToLast E' pattern:\n{}",
+                i + 1, format_tree(tree));
+        }
+    }
+
+    #[test]
+    fn test_same_index_restriction_zodiac_subset() {
+        // Test with a subset of zodiac words (those without 'R')
+        // to match the context where we saw the pattern in the full zodiac output
+        let data = words(&["leo", "gemini", "pisces"]);
+        let sol = minimal_trees(&data, false, true);
+
+        // Check all generated trees to ensure none use the forbidden pattern
+        for (i, tree) in sol.trees.iter().enumerate() {
+            let has_forbidden_pattern = check_tree_for_forbidden_pattern(tree);
+            if has_forbidden_pattern {
+                println!("Tree {} has forbidden pattern:\n{}", i + 1, format_tree(tree));
+            }
+            assert!(!has_forbidden_pattern,
+                "Tree {} should not contain same-letter collision pattern", i + 1);
+        }
+    }
+
+    // Helper function to check for the forbidden pattern in a tree
+    fn check_tree_for_forbidden_pattern(node: &Node) -> bool {
+        check_tree_for_forbidden_pattern_recursive(node, None, None)
+    }
+
+    fn check_tree_for_forbidden_pattern_recursive(
+        node: &Node,
+        parent_test_pos: Option<node::Position>,
+        parent_test_letter: Option<char>,
+    ) -> bool {
+        match node {
+            Node::Leaf(_) => false,
+            Node::Repeat { no, .. } => {
+                check_tree_for_forbidden_pattern_recursive(no, parent_test_pos, parent_test_letter)
+            }
+            Node::PositionalSplit {
+                test_letter,
+                test_position,
+                yes,
+                no,
+                ..
+            } => {
+                // Check if this split violates the restriction
+                if let (Some(parent_pos), Some(parent_letter)) = (parent_test_pos, parent_test_letter) {
+                    if *test_letter == parent_letter {
+                        use constraints::positions_can_collide;
+                        if positions_can_collide(parent_pos, *test_position) {
+                            return true; // Forbidden pattern found!
+                        }
+                    }
+                }
+
+                // Recursively check children
+                check_tree_for_forbidden_pattern_recursive(yes, Some(*test_position), Some(*test_letter))
+                    || check_tree_for_forbidden_pattern_recursive(no, Some(*test_position), Some(*test_letter))
+            }
         }
     }
 

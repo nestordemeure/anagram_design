@@ -96,11 +96,13 @@ There are three split **classes**: Contains → Positional (first/second/third/l
 Immediate children may use touched letters as primary when moving **same-class or downward**:
 - After a **Contains 'P'?**, the yes-branch child can use P as primary (for another Contains, any positional, or Double/Triple).
 - After a **soft Contains 'P'? (all No contain 'S')**, the no-branch child can use S as primary (same movement rules).
-- After a **Positional 'P'**, the yes-branch child can use P as primary if it's another positional (same or different position), Double, or Triple.
-- After a **soft Positional 'P'? (no-branch constraint uses 'S')**, the no-branch child can use S as primary if it's another positional, Double, or Triple.
+- After a **Positional 'P'**, the yes-branch child can use P as primary if it's another positional (same or different position), Double, or Triple, **provided the two positions don't refer to the same absolute index in a word**.
+- After a **soft Positional 'P'? (no-branch constraint uses 'S')**, the no-branch child can use S as primary if it's another positional, Double, or Triple, **provided the two positions don't refer to the same absolute index in a word**.
 - After a **Double/Triple 'P'**, children can use P as primary if they are also Double or Triple.
 
 These exceptions **chain**: you can do Contains P → First P → Double P, as long as each step moves same-class or downward.
+
+**Same-Index Restriction**: When chaining positional splits with the same letter, the two positions must not refer to the same absolute index in any word. For example, in a 3-letter word like "Leo", "Second" (index 1) and "Second-to-last" (index 1) refer to the same position, so "Second E?" cannot be followed by "Second-to-last E?" or vice versa.
 
 ### Cost (lexicographically minimized)
 
@@ -118,13 +120,7 @@ Only the first 5 optimal trees are stored/displayed; truncation is noted but opt
 cargo run --quiet
 ```
 
-The binary prints the optimal trees for the Zodiac word set twice, once allowing `Repeat` nodes and once disallowing them.
-
-Baseline:
-* Allow repeat: true | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.5, avg no 0.9, depth 6) | 5 tree(s)
-* Allow repeat: true | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.2, avg no 1.2, depth 6) | 5 tree(s)
-* Allow repeat: false | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.5, avg no 1.3, depth 6) | 5 tree(s)
-* Allow repeat: false | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.4, avg no 1.4, depth 5) | 5 tree(s)
+The binary prints trees for the Zodiac word set, once allowing `Repeat` nodes and once disallowing them.
 
 ## Testing
 
@@ -158,6 +154,3 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 * further subtleties (new soft constraints):
   * introduce sounds-based subtleties
-
-* the exeption letting you follow a positional with another one does not apply if those are the same letter
- * second letter AND second to last letter both referencing the same E
