@@ -141,3 +141,16 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 * further subtleties:
   * introduce sounds-based soft splits?
+
+in this:
+```
+Contains 'R'? (all No contain 'E')
+│└─ No: Second letter 'E'? (all No have 'I' second)
+│   │└─ No: Pisces
+│   │
+│   Contains 'L'? (all No contain 'I') ▼
+│   │└─ No: Gemini
+│   │
+│   └─ Leo
+```
+why do i not get "Second letter 'E'? (all No have 'E' second-to-last)" as an option?
