@@ -171,7 +171,27 @@ pub const SOFT_NO_PAIRS: &[SoftNoPair] = &[
 ];
 
 pub fn split_allowed(constraints: &Constraints, primary_idx: usize, secondary_idx: usize) -> bool {
-    constraints.primary_allowed(primary_idx) && constraints.secondary_allowed(secondary_idx)
+    // For hard splits (primary == secondary), the exception should apply to both checks
+    if primary_idx == secondary_idx {
+        constraints.primary_allowed(primary_idx)
+    } else {
+        constraints.primary_allowed(primary_idx) && constraints.secondary_allowed(secondary_idx)
+    }
+}
+
+/// Get the reciprocal letter index for a given letter, if one exists.
+/// Returns None if the letter has no defined reciprocal.
+pub fn get_reciprocal(letter_idx: usize) -> Option<usize> {
+    let letter = (b'a' + letter_idx as u8) as char;
+
+    // Find a soft no pair where this letter is the test_letter
+    for pair in SOFT_NO_PAIRS {
+        if pair.test_letter == letter {
+            return Some((pair.requirement_letter as u8 - b'a') as usize);
+        }
+    }
+
+    None
 }
 
 pub fn branch_constraints(

@@ -1,4 +1,4 @@
-use crate::node::Node;
+use crate::node::{Node, Position};
 
 pub fn format_tree(node: &Node) -> String {
     // Helper to capitalize the first letter of a word
@@ -15,15 +15,56 @@ pub fn format_tree(node: &Node) -> String {
         c.to_ascii_uppercase()
     }
 
-    fn describe_pos(from_end: bool, idx: u8) -> String {
-        match (from_end, idx) {
-            (false, 1) => "first".to_string(),
-            (false, 2) => "second".to_string(),
-            (false, 3) => "third".to_string(),
-            (true, 1) => "last".to_string(),
-            (true, 2) => "second-to-last".to_string(),
-            (true, 3) => "third-to-last".to_string(),
-            _ => format!("pos {}", idx),
+    // Format a position description
+    fn format_position_question(
+        test_letter: char,
+        test_position: &Position,
+        requirement_letter: char,
+        requirement_position: &Position,
+    ) -> String {
+        let test_letter_upper = display_letter(test_letter);
+        let req_letter_upper = display_letter(requirement_letter);
+
+        // Hard split: test and requirement are the same
+        if test_letter == requirement_letter && test_position == requirement_position {
+            match test_position {
+                Position::Contains => format!("Contains '{}'?", test_letter_upper),
+                Position::First => format!("First letter '{}'?", test_letter_upper),
+                Position::Second => format!("Second letter '{}'?", test_letter_upper),
+                Position::Third => format!("Third letter '{}'?", test_letter_upper),
+                Position::ThirdToLast => format!("Third-to-last letter '{}'?", test_letter_upper),
+                Position::SecondToLast => format!("Second-to-last letter '{}'?", test_letter_upper),
+                Position::Last => format!("Last letter '{}'?", test_letter_upper),
+                Position::Double => format!("Double '{}'?", test_letter_upper),
+                Position::Triple => format!("Triple '{}'?", test_letter_upper),
+            }
+        } else {
+            // Soft split: different test and requirement
+            let test_desc = match test_position {
+                Position::Contains => format!("Contains '{}'?", test_letter_upper),
+                Position::First => format!("First letter '{}'?", test_letter_upper),
+                Position::Second => format!("Second letter '{}'?", test_letter_upper),
+                Position::Third => format!("Third letter '{}'?", test_letter_upper),
+                Position::ThirdToLast => format!("Third-to-last letter '{}'?", test_letter_upper),
+                Position::SecondToLast => format!("Second-to-last letter '{}'?", test_letter_upper),
+                Position::Last => format!("Last letter '{}'?", test_letter_upper),
+                Position::Double => format!("Double '{}'?", test_letter_upper),
+                Position::Triple => format!("Triple '{}'?", test_letter_upper),
+            };
+
+            let req_desc = match requirement_position {
+                Position::Contains => format!("all No contain '{}'", req_letter_upper),
+                Position::First => format!("all No have '{}' first", req_letter_upper),
+                Position::Second => format!("all No have '{}' second", req_letter_upper),
+                Position::Third => format!("all No have '{}' third", req_letter_upper),
+                Position::ThirdToLast => format!("all No have '{}' third-to-last", req_letter_upper),
+                Position::SecondToLast => format!("all No have '{}' second-to-last", req_letter_upper),
+                Position::Last => format!("all No have '{}' last", req_letter_upper),
+                Position::Double => format!("all No double '{}'", req_letter_upper),
+                Position::Triple => format!("all No triple '{}'", req_letter_upper),
+            };
+
+            format!("{} ({})", test_desc, req_desc)
         }
     }
 
@@ -51,133 +92,23 @@ pub fn format_tree(node: &Node) -> String {
 
                 render_yes_final(&Node::Leaf(word.clone()), &child_prefix, out);
             }
-            Node::Split { letter, yes, no } => {
-                // No branch that contains another split
-                out.push_str(prefix);
-                out.push_str("└─ No: Contains '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                // The no-branch's children are indented with "│   "
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
-
-                // The yes branch of this nested split uses └─ (it's the final item in this branch)
-                render_yes_final(yes, &child_prefix, out);
-            }
-            Node::SoftSplit {
+            Node::PositionalSplit {
                 test_letter,
+                test_position,
                 requirement_letter,
-                yes,
-                no,
-            } => {
-                // No branch that contains a soft split
-                out.push_str(prefix);
-                out.push_str("└─ No: Contains '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No contain '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("')\n");
-
-                // The no-branch's children are indented with "│   "
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
-
-                // The yes branch of this nested split uses └─ (it's the final item in this branch)
-                render_yes_final(yes, &child_prefix, out);
-            }
-            Node::FirstLetterSplit { letter, yes, no } => {
-                // No branch that contains a first letter split
-                out.push_str(prefix);
-                out.push_str("└─ No: First letter '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
-                render_yes_final(yes, &child_prefix, out);
-            }
-            Node::SoftFirstLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                // No branch that contains a soft first letter split
-                out.push_str(prefix);
-                out.push_str("└─ No: First letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("' second)\n");
-
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
-                render_yes_final(yes, &child_prefix, out);
-            }
-            Node::LastLetterSplit { letter, yes, no } => {
-                // No branch that contains a last letter split
-                out.push_str(prefix);
-                out.push_str("└─ No: Last letter '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
-                render_yes_final(yes, &child_prefix, out);
-            }
-            Node::SoftLastLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                // No branch that contains a soft last letter split
-                out.push_str(prefix);
-                out.push_str("└─ No: Last letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("' second-to-last)\n");
-
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
-                render_yes_final(yes, &child_prefix, out);
-            }
-            Node::SoftMirrorPosSplit {
-                test_letter,
-                test_index,
-                test_from_end,
-                requirement_index,
-                requirement_from_end,
+                requirement_position,
                 yes,
                 no,
             } => {
                 out.push_str(prefix);
                 out.push_str("└─ No: ");
-                out.push_str(&describe_pos(*test_from_end, *test_index));
-                out.push_str(" letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have it ");
-                out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
-                out.push_str(")\n");
-
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
-                render_yes_final(yes, &child_prefix, out);
-            }
-            Node::SoftDoubleLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                out.push_str(prefix);
-                out.push_str("└─ No: Double '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No double '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("')\n");
+                out.push_str(&format_position_question(
+                    *test_letter,
+                    test_position,
+                    *requirement_letter,
+                    requirement_position,
+                ));
+                out.push('\n');
 
                 let child_prefix = format!("{}   ", prefix);
                 render_no_branch(no, &format!("{}│", child_prefix), out);
@@ -215,171 +146,26 @@ pub fn format_tree(node: &Node) -> String {
 
                 render_yes_final(&Node::Leaf(word.clone()), prefix, out);
             }
-            Node::Split { letter, yes, no } => {
-                // For a split in the Yes position, continue the spine pattern
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                out.push_str(prefix);
-                out.push_str("Contains '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_yes_final(yes, prefix, out);
-            }
-            Node::SoftSplit {
+            Node::PositionalSplit {
                 test_letter,
+                test_position,
                 requirement_letter,
+                requirement_position,
                 yes,
                 no,
             } => {
-                // For a soft split in the Yes position, continue the spine pattern
+                // For a positional split in the Yes position, continue the spine pattern
                 out.push_str(prefix);
                 out.push_str("│\n");
 
                 out.push_str(prefix);
-                out.push_str("Contains '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No contain '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("')\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_yes_final(yes, prefix, out);
-            }
-            Node::FirstLetterSplit { letter, yes, no } => {
-                // For a first letter split in the Yes position, continue the spine pattern
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                out.push_str(prefix);
-                out.push_str("First letter '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_yes_final(yes, prefix, out);
-            }
-            Node::SoftFirstLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                // For a soft first letter split in the Yes position, continue the spine pattern
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                out.push_str(prefix);
-                out.push_str("First letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("' second)\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_yes_final(yes, prefix, out);
-            }
-            Node::LastLetterSplit { letter, yes, no } => {
-                // For a last letter split in the Yes position, continue the spine pattern
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                out.push_str(prefix);
-                out.push_str("Last letter '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_yes_final(yes, prefix, out);
-            }
-            Node::SoftLastLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                // For a soft last letter split in the Yes position, continue the spine pattern
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                out.push_str(prefix);
-                out.push_str("Last letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("' second-to-last)\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_yes_final(yes, prefix, out);
-            }
-            Node::SoftMirrorPosSplit {
-                test_letter,
-                test_index,
-                test_from_end,
-                requirement_index,
-                requirement_from_end,
-                yes,
-                no,
-            } => {
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                out.push_str(prefix);
-                out.push_str(&describe_pos(*test_from_end, *test_index));
-                out.push_str(" letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have it ");
-                out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
-                out.push_str(")\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_yes_final(yes, prefix, out);
-            }
-            Node::SoftDoubleLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                out.push_str(prefix);
-                out.push_str("Double '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No double '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("')\n");
+                out.push_str(&format_position_question(
+                    *test_letter,
+                    test_position,
+                    *requirement_letter,
+                    requirement_position,
+                ));
+                out.push('\n');
 
                 render_no_branch(no, &format!("{}│", prefix), out);
 
@@ -418,12 +204,23 @@ pub fn format_tree(node: &Node) -> String {
 
                 render_spine(&Node::Leaf(word.clone()), prefix, is_final, out);
             }
-            Node::Split { letter, yes, no } => {
+            Node::PositionalSplit {
+                test_letter,
+                test_position,
+                requirement_letter,
+                requirement_position,
+                yes,
+                no,
+            } => {
                 // Print the question
                 out.push_str(prefix);
-                out.push_str("Contains '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
+                out.push_str(&format_position_question(
+                    *test_letter,
+                    test_position,
+                    *requirement_letter,
+                    requirement_position,
+                ));
+                out.push('\n');
 
                 // No branch diverges sideways
                 render_no_branch(no, &format!("{}│", prefix), out);
@@ -433,156 +230,6 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str("│\n");
 
                 // Continue down the Yes spine
-                render_spine(yes, prefix, is_final, out);
-            }
-            Node::SoftSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                // Print the question for soft split
-                out.push_str(prefix);
-                out.push_str("Contains '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No contain '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("')\n");
-
-                // No branch diverges sideways
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                // Spacer line for clarity between decision points
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                // Continue down the Yes spine
-                render_spine(yes, prefix, is_final, out);
-            }
-            Node::FirstLetterSplit { letter, yes, no } => {
-                // Print the question for first letter split
-                out.push_str(prefix);
-                out.push_str("First letter '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                // No branch diverges sideways
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                // Spacer line for clarity between decision points
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                // Continue down the Yes spine
-                render_spine(yes, prefix, is_final, out);
-            }
-            Node::SoftFirstLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                // Print the question for soft first letter split
-                out.push_str(prefix);
-                out.push_str("First letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("' second)\n");
-
-                // No branch diverges sideways
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                // Spacer line for clarity between decision points
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                // Continue down the Yes spine
-                render_spine(yes, prefix, is_final, out);
-            }
-            Node::LastLetterSplit { letter, yes, no } => {
-                // Print the question for last letter split
-                out.push_str(prefix);
-                out.push_str("Last letter '");
-                out.push(display_letter(*letter));
-                out.push_str("'?\n");
-
-                // No branch diverges sideways
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                // Spacer line for clarity between decision points
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                // Continue down the Yes spine
-                render_spine(yes, prefix, is_final, out);
-            }
-            Node::SoftLastLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                // Print the question for soft last letter split
-                out.push_str(prefix);
-                out.push_str("Last letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("' second-to-last)\n");
-
-                // No branch diverges sideways
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                // Spacer line for clarity between decision points
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                // Continue down the Yes spine
-                render_spine(yes, prefix, is_final, out);
-            }
-            Node::SoftMirrorPosSplit {
-                test_letter,
-                test_index,
-                test_from_end,
-                requirement_index,
-                requirement_from_end,
-                yes,
-                no,
-            } => {
-                out.push_str(prefix);
-                out.push_str(&describe_pos(*test_from_end, *test_index));
-                out.push_str(" letter '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No have it ");
-                out.push_str(&describe_pos(*requirement_from_end, *requirement_index));
-                out.push_str(")\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
-                render_spine(yes, prefix, is_final, out);
-            }
-            Node::SoftDoubleLetterSplit {
-                test_letter,
-                requirement_letter,
-                yes,
-                no,
-            } => {
-                out.push_str(prefix);
-                out.push_str("Double '");
-                out.push(display_letter(*test_letter));
-                out.push_str("'? (all No double '");
-                out.push(display_letter(*requirement_letter));
-                out.push_str("')\n");
-
-                render_no_branch(no, &format!("{}│", prefix), out);
-
-                out.push_str(prefix);
-                out.push_str("│\n");
-
                 render_spine(yes, prefix, is_final, out);
             }
         }

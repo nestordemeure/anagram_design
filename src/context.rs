@@ -8,6 +8,7 @@ pub struct Context<'a> {
     pub second_to_last_letter_masks: [u16; 26],
     pub third_to_last_letter_masks: [u16; 26],
     pub double_letter_masks: [u16; 26],
+    pub triple_letter_masks: [u16; 26],
 }
 
 impl<'a> Context<'a> {
@@ -22,6 +23,7 @@ impl<'a> Context<'a> {
             second_to_last_letter_masks: make_second_to_last_letter_masks(words),
             third_to_last_letter_masks: make_third_to_last_letter_masks(words),
             double_letter_masks: make_double_letter_masks(words),
+            triple_letter_masks: make_triple_letter_masks(words),
         }
     }
 }
@@ -198,13 +200,34 @@ fn make_double_letter_masks(words: &[String]) -> [u16; 26] {
         for ch in w.chars() {
             if ch.is_ascii_alphabetic() {
                 let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
-                if counts[l] < 2 {
+                if counts[l] < 3 {
                     counts[l] += 1;
                 }
             }
         }
         for (l, &c) in counts.iter().enumerate() {
             if c >= 2 {
+                masks[l] |= 1u16 << idx;
+            }
+        }
+    }
+    masks
+}
+
+fn make_triple_letter_masks(words: &[String]) -> [u16; 26] {
+    let mut masks = [0u16; 26];
+    for (idx, w) in words.iter().enumerate() {
+        let mut counts = [0u8; 26];
+        for ch in w.chars() {
+            if ch.is_ascii_alphabetic() {
+                let l = ch.to_ascii_lowercase() as usize - 'a' as usize;
+                if counts[l] < 3 {
+                    counts[l] += 1;
+                }
+            }
+        }
+        for (l, &c) in counts.iter().enumerate() {
+            if c >= 3 {
                 masks[l] |= 1u16 << idx;
             }
         }

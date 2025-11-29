@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use serde::Serialize;
-use crate::node::{Node, NodeRef};
+use crate::node::{Node, NodeRef, Position};
 
 /// Description of a node's split logic, used for comparing nodes for equality
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
@@ -8,20 +8,12 @@ use crate::node::{Node, NodeRef};
 pub enum NodeInfo {
     Leaf { word: String },
     Repeat { word: String },
-    Split { letter: char },
-    SoftSplit { test_letter: char, requirement_letter: char },
-    FirstLetterSplit { letter: char },
-    SoftFirstLetterSplit { test_letter: char, requirement_letter: char },
-    LastLetterSplit { letter: char },
-    SoftLastLetterSplit { test_letter: char, requirement_letter: char },
-    SoftMirrorPosSplit {
+    PositionalSplit {
         test_letter: char,
-        test_index: u8,
-        test_from_end: bool,
-        requirement_index: u8,
-        requirement_from_end: bool,
+        test_position: Position,
+        requirement_letter: char,
+        requirement_position: Position,
     },
-    SoftDoubleLetterSplit { test_letter: char, requirement_letter: char },
 }
 
 impl NodeInfo {
@@ -30,53 +22,18 @@ impl NodeInfo {
         match node {
             Node::Leaf(word) => NodeInfo::Leaf { word: word.clone() },
             Node::Repeat { word, .. } => NodeInfo::Repeat { word: word.clone() },
-            Node::Split { letter, .. } => NodeInfo::Split { letter: *letter },
-            Node::SoftSplit { test_letter, requirement_letter, .. } => {
-                NodeInfo::SoftSplit {
-                    test_letter: *test_letter,
-                    requirement_letter: *requirement_letter,
-                }
-            }
-            Node::FirstLetterSplit { letter, .. } => {
-                NodeInfo::FirstLetterSplit { letter: *letter }
-            }
-            Node::SoftFirstLetterSplit { test_letter, requirement_letter, .. } => {
-                NodeInfo::SoftFirstLetterSplit {
-                    test_letter: *test_letter,
-                    requirement_letter: *requirement_letter,
-                }
-            }
-            Node::LastLetterSplit { letter, .. } => {
-                NodeInfo::LastLetterSplit { letter: *letter }
-            }
-            Node::SoftLastLetterSplit { test_letter, requirement_letter, .. } => {
-                NodeInfo::SoftLastLetterSplit {
-                    test_letter: *test_letter,
-                    requirement_letter: *requirement_letter,
-                }
-            }
-            Node::SoftMirrorPosSplit {
+            Node::PositionalSplit {
                 test_letter,
-                test_index,
-                test_from_end,
-                requirement_index,
-                requirement_from_end,
+                test_position,
+                requirement_letter,
+                requirement_position,
                 ..
-            } => {
-                NodeInfo::SoftMirrorPosSplit {
-                    test_letter: *test_letter,
-                    test_index: *test_index,
-                    test_from_end: *test_from_end,
-                    requirement_index: *requirement_index,
-                    requirement_from_end: *requirement_from_end,
-                }
-            }
-            Node::SoftDoubleLetterSplit { test_letter, requirement_letter, .. } => {
-                NodeInfo::SoftDoubleLetterSplit {
-                    test_letter: *test_letter,
-                    requirement_letter: *requirement_letter,
-                }
-            }
+            } => NodeInfo::PositionalSplit {
+                test_letter: *test_letter,
+                test_position: *test_position,
+                requirement_letter: *requirement_letter,
+                requirement_position: *requirement_position,
+            },
         }
     }
 }
@@ -131,14 +88,7 @@ impl MergedNode {
                         Node::Repeat { no, .. } => {
                             no_branches.push(no.clone());
                         }
-                        Node::Split { yes, no, .. }
-                        | Node::SoftSplit { yes, no, .. }
-                        | Node::FirstLetterSplit { yes, no, .. }
-                        | Node::SoftFirstLetterSplit { yes, no, .. }
-                        | Node::LastLetterSplit { yes, no, .. }
-                        | Node::SoftLastLetterSplit { yes, no, .. }
-                        | Node::SoftMirrorPosSplit { yes, no, .. }
-                        | Node::SoftDoubleLetterSplit { yes, no, .. } => {
+                        Node::PositionalSplit { yes, no, .. } => {
                             yes_branches.push(yes.clone());
                             no_branches.push(no.clone());
                         }

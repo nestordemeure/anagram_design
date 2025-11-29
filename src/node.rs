@@ -2,6 +2,36 @@ use std::rc::Rc;
 
 use crate::cost::Cost;
 
+/// Represents the position/type of a split
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum Position {
+    Contains,
+    First,
+    Second,
+    Third,
+    ThirdToLast,
+    SecondToLast,
+    Last,
+    Double,
+    Triple,
+}
+
+impl Position {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Position::Contains => "contains",
+            Position::First => "first",
+            Position::Second => "second",
+            Position::Third => "third",
+            Position::ThirdToLast => "third-to-last",
+            Position::SecondToLast => "second-to-last",
+            Position::Last => "last",
+            Position::Double => "double",
+            Position::Triple => "triple",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Node {
     Leaf(String),
@@ -10,64 +40,18 @@ pub enum Node {
         word: String,
         no: Rc<Node>,
     },
-    Split {
-        letter: char,
-        yes: Rc<Node>,
-        no: Rc<Node>,
-    },
-    SoftSplit {
-        /// Letter to test for (e.g., 'i' in I/E)
+    /// Unified positional split that handles all split types
+    PositionalSplit {
+        /// Letter to test for (primary letter)
         test_letter: char,
-        /// Letter that all No items must contain (e.g., 'e' in I/E)
+        /// Position where to test
+        test_position: Position,
+        /// Letter required in No branch (secondary letter)
+        /// For hard splits, this is the same as test_letter
         requirement_letter: char,
-        yes: Rc<Node>,
-        no: Rc<Node>,
-    },
-    FirstLetterSplit {
-        letter: char,
-        yes: Rc<Node>,
-        no: Rc<Node>,
-    },
-    SoftFirstLetterSplit {
-        /// Letter to test as first letter
-        test_letter: char,
-        /// Letter that all No items must have as second letter
-        requirement_letter: char,
-        yes: Rc<Node>,
-        no: Rc<Node>,
-    },
-    LastLetterSplit {
-        letter: char,
-        yes: Rc<Node>,
-        no: Rc<Node>,
-    },
-    SoftLastLetterSplit {
-        /// Letter to test as last letter
-        test_letter: char,
-        /// Letter that all No items must have as second-to-last letter
-        requirement_letter: char,
-        yes: Rc<Node>,
-        no: Rc<Node>,
-    },
-    SoftMirrorPosSplit {
-        /// Letter to test
-        test_letter: char,
-        /// 1-based position from the tested end (1 = first/last)
-        test_index: u8,
-        /// true when counting from the end (last/second-to-last/third-to-last)
-        test_from_end: bool,
-        /// Position that all No items must carry the same letter in
-        requirement_index: u8,
-        /// true when the requirement position is counted from the end
-        requirement_from_end: bool,
-        yes: Rc<Node>,
-        no: Rc<Node>,
-    },
-    SoftDoubleLetterSplit {
-        /// Letter that must appear twice in the Yes branch
-        test_letter: char,
-        /// Letter (different) that must appear twice in all No items
-        requirement_letter: char,
+        /// Position where requirement is checked
+        /// For hard splits, this is the same as test_position
+        requirement_position: Position,
         yes: Rc<Node>,
         no: Rc<Node>,
     },
@@ -82,102 +66,26 @@ pub struct Solution {
     pub exhausted: bool,
 }
 
-pub fn combine_children(letter: char, left: &NodeRef, right: &NodeRef) -> NodeRef {
-    Rc::new(Node::Split {
-        letter,
-        yes: Rc::clone(left),
-        no: Rc::clone(right),
-    })
-}
-
-pub fn combine_soft_children(
+/// Create a positional split node
+pub fn combine_positional_split(
     test_letter: char,
+    test_position: Position,
     requirement_letter: char,
+    requirement_position: Position,
     left: &NodeRef,
     right: &NodeRef,
 ) -> NodeRef {
-    Rc::new(Node::SoftSplit {
+    Rc::new(Node::PositionalSplit {
         test_letter,
+        test_position,
         requirement_letter,
+        requirement_position,
         yes: Rc::clone(left),
         no: Rc::clone(right),
     })
 }
 
-pub fn combine_first_letter_children(letter: char, left: &NodeRef, right: &NodeRef) -> NodeRef {
-    Rc::new(Node::FirstLetterSplit {
-        letter,
-        yes: Rc::clone(left),
-        no: Rc::clone(right),
-    })
-}
-
-pub fn combine_soft_first_letter_children(
-    test_letter: char,
-    requirement_letter: char,
-    left: &NodeRef,
-    right: &NodeRef,
-) -> NodeRef {
-    Rc::new(Node::SoftFirstLetterSplit {
-        test_letter,
-        requirement_letter,
-        yes: Rc::clone(left),
-        no: Rc::clone(right),
-    })
-}
-
-pub fn combine_last_letter_children(letter: char, left: &NodeRef, right: &NodeRef) -> NodeRef {
-    Rc::new(Node::LastLetterSplit {
-        letter,
-        yes: Rc::clone(left),
-        no: Rc::clone(right),
-    })
-}
-
-pub fn combine_soft_last_letter_children(
-    test_letter: char,
-    requirement_letter: char,
-    left: &NodeRef,
-    right: &NodeRef,
-) -> NodeRef {
-    Rc::new(Node::SoftLastLetterSplit {
-        test_letter,
-        requirement_letter,
-        yes: Rc::clone(left),
-        no: Rc::clone(right),
-    })
-}
-
-pub fn combine_soft_mirror_pos_children(
-    test_letter: char,
-    test_index: u8,
-    test_from_end: bool,
-    requirement_index: u8,
-    requirement_from_end: bool,
-    left: &NodeRef,
-    right: &NodeRef,
-) -> NodeRef {
-    Rc::new(Node::SoftMirrorPosSplit {
-        test_letter,
-        test_index,
-        test_from_end,
-        requirement_index,
-        requirement_from_end,
-        yes: Rc::clone(left),
-        no: Rc::clone(right),
-    })
-}
-
-pub fn combine_soft_double_letter_children(
-    test_letter: char,
-    requirement_letter: char,
-    left: &NodeRef,
-    right: &NodeRef,
-) -> NodeRef {
-    Rc::new(Node::SoftDoubleLetterSplit {
-        test_letter,
-        requirement_letter,
-        yes: Rc::clone(left),
-        no: Rc::clone(right),
-    })
+/// Helper to determine if a split is hard (same test and requirement)
+pub fn is_hard_split(test_letter: char, test_position: Position, requirement_letter: char, requirement_position: Position) -> bool {
+    test_letter == requirement_letter && test_position == requirement_position
 }

@@ -4,13 +4,10 @@ use hashbrown::HashMap;
 use smallvec::SmallVec;
 
 use crate::cost::{compare_costs, Cost};
-use crate::node::{Node, NodeRef, Solution, combine_children, combine_soft_children,
-                  combine_first_letter_children, combine_soft_first_letter_children,
-                  combine_last_letter_children, combine_soft_last_letter_children,
-                  combine_soft_mirror_pos_children, combine_soft_double_letter_children};
-use crate::constraints::{Constraints, SOFT_NO_PAIRS, split_allowed, branch_constraints};
+use crate::node::{Node, NodeRef, Solution, Position, combine_positional_split};
+use crate::constraints::{Constraints, get_reciprocal, split_allowed, branch_constraints};
 use crate::context::{Context, mask_count, single_word_from_mask, partitions,
-                     letters_present, position_mask};
+                     letters_present};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Key {
@@ -29,6 +26,379 @@ fn push_limited(target: &mut SmallVec<[NodeRef; 5]>, limit: Option<usize>, node:
             target.push(node);
             true
         }
+    }
+}
+
+/// Get the masks for a specific position type
+fn get_position_masks<'a>(ctx: &'a Context<'a>, position: Position) -> &'a [u16; 26] {
+    match position {
+        Position::Contains => &ctx.letter_masks,
+        Position::First => &ctx.first_letter_masks,
+        Position::Second => &ctx.second_letter_masks,
+        Position::Third => &ctx.third_letter_masks,
+        Position::ThirdToLast => &ctx.third_to_last_letter_masks,
+        Position::SecondToLast => &ctx.second_to_last_letter_masks,
+        Position::Last => &ctx.last_letter_masks,
+        Position::Double => &ctx.double_letter_masks,
+        Position::Triple => &ctx.triple_letter_masks,
+    }
+}
+
+/// Generate adjacent/mirror soft splits for a given position
+#[allow(clippy::too_many_arguments)]
+fn generate_adjacent_soft_splits(
+    test_position: Position,
+    test_idx: usize,
+    yes: u16,
+    no: u16,
+    mask: u16,
+    test_letter: char,
+    ctx: &Context<'_>,
+    allow_repeat: bool,
+    prioritize_soft_no: bool,
+    constraints: &Constraints,
+    limit: Option<usize>,
+    memo: &mut HashMap<Key, Solution>,
+    best_cost: &mut Option<Cost>,
+    best_trees: &mut SmallVec<[NodeRef; 5]>,
+    exhausted_flag: &mut bool,
+) {
+    // Define adjacent and mirror positions based on the systematization
+    let soft_requirement_positions: Vec<Position> = match test_position {
+        Position::Contains => vec![],  // No adjacent positions for contains
+        Position::First => vec![Position::Second, Position::Last],
+        Position::Second => vec![Position::First, Position::Third, Position::SecondToLast],
+        Position::Third => vec![Position::Second, Position::ThirdToLast],
+        Position::ThirdToLast => vec![Position::Third, Position::SecondToLast],
+        Position::SecondToLast => vec![Position::Second, Position::ThirdToLast, Position::Last],
+        Position::Last => vec![Position::First, Position::SecondToLast],
+        Position::Double | Position::Triple => vec![],  // Special handling below
+    };
+
+    for req_position in soft_requirement_positions {
+        if !split_allowed(constraints, test_idx, test_idx) {
+            continue;
+        }
+
+        let req_masks = get_position_masks(ctx, req_position);
+        // Check if all no items have the same letter at the requirement position
+        if no & req_masks[test_idx] == no {
+            try_split(
+                mask,
+                yes,
+                no,
+                test_idx,
+                test_idx,  // same letter
+                test_letter,
+                test_position,
+                test_letter,
+                req_position,
+                false, // is_soft
+                ctx,
+                allow_repeat,
+                prioritize_soft_no,
+                constraints,
+                limit,
+                memo,
+                best_cost,
+                best_trees,
+                exhausted_flag,
+            );
+        }
+    }
+
+    // Special handling for Double and Triple: require a different letter doubled/tripled in No branch
+    if matches!(test_position, Position::Double | Position::Triple) {
+        let req_masks = get_position_masks(ctx, test_position);
+        // Find a different letter that all No items have doubled/tripled
+        for req_idx in 0..26 {
+            if req_idx == test_idx {
+                continue;
+            }
+            if no & req_masks[req_idx] == no {
+                if split_allowed(constraints, test_idx, req_idx) {
+                    let req_letter = (b'a' + req_idx as u8) as char;
+                    try_split(
+                        mask,
+                        yes,
+                        no,
+                        test_idx,
+                        req_idx,
+                        test_letter,
+                        test_position,
+                        req_letter,
+                        test_position,  // same position type, different letter
+                        false, // is_soft
+                        ctx,
+                        allow_repeat,
+                        prioritize_soft_no,
+                        constraints,
+                        limit,
+                        memo,
+                        best_cost,
+                        best_trees,
+                        exhausted_flag,
+                    );
+                    break;  // Only need one alternative letter
+                }
+            }
+        }
+    }
+}
+
+/// Try a specific split configuration
+#[allow(clippy::too_many_arguments)]
+fn try_split(
+    _mask: u16,
+    yes: u16,
+    no: u16,
+    test_idx: usize,
+    req_idx: usize,
+    test_letter: char,
+    test_position: Position,
+    req_letter: char,
+    req_position: Position,
+    is_hard: bool,
+    ctx: &Context<'_>,
+    allow_repeat: bool,
+    prioritize_soft_no: bool,
+    constraints: &Constraints,
+    limit: Option<usize>,
+    memo: &mut HashMap<Key, Solution>,
+    best_cost: &mut Option<Cost>,
+    best_trees: &mut SmallVec<[NodeRef; 5]>,
+    exhausted_flag: &mut bool,
+) {
+    // Determine exception allowances
+    // Allow position splits to reuse their test letter in the yes branch
+    let test_bit = 1u32 << test_idx;
+    let req_bit = 1u32 << req_idx;
+
+    let (yes_allow, no_allow) = if is_hard {
+        // Hard splits: allow test letter once in yes branch
+        (Some(test_bit), None)
+    } else if test_idx == req_idx {
+        // Soft split with same letter (mirror positions): allow in yes branch
+        (Some(test_bit), None)
+    } else {
+        // Soft split with different letters (reciprocals/doubles): allow both
+        (Some(test_bit), Some(req_bit))
+    };
+
+    let (yes_constraints, no_constraints) = branch_constraints(
+        constraints,
+        test_idx,
+        req_idx,
+        yes_allow,
+        no_allow,
+    );
+
+    let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_constraints, limit, memo);
+    let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, no_constraints, limit, memo);
+
+    // Calculate costs based on whether this is a hard or soft split
+    let yes_cost = yes_sol.cost;
+    let no_cost = if is_hard {
+        Cost {
+            nos: no_sol.cost.nos + 1,
+            hard_nos: no_sol.cost.hard_nos + 1,
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
+            depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
+        }
+    } else {
+        Cost {
+            nos: no_sol.cost.nos + 1,
+            hard_nos: no_sol.cost.hard_nos,  // soft no does not increment hard_nos
+            sum_nos: no_sol.cost.sum_nos,
+            sum_hard_nos: no_sol.cost.sum_hard_nos,
+            depth: no_sol.cost.depth,
+            word_count: no_sol.cost.word_count,
+        }
+    };
+
+    let nos = yes_cost.nos.max(no_cost.nos);
+    let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+    let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
+    let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+    let total_sum_hard_nos = if is_hard {
+        yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count
+    } else {
+        yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos
+    };
+
+    let branch_cost = Cost {
+        nos,
+        hard_nos,
+        sum_nos: total_sum_nos,
+        sum_hard_nos: total_sum_hard_nos,
+        depth: branch_depth,
+        word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+    };
+
+    // Update best if this is better
+    match best_cost {
+        None => {
+            *best_cost = Some(branch_cost);
+            for y in &yes_sol.trees {
+                for n in &no_sol.trees {
+                    if !push_limited(
+                        best_trees,
+                        limit,
+                        combine_positional_split(test_letter, test_position, req_letter, req_position, y, n),
+                    ) {
+                        *exhausted_flag = true;
+                        break;
+                    }
+                }
+                if *exhausted_flag {
+                    break;
+                }
+            }
+            *exhausted_flag = *exhausted_flag || yes_sol.exhausted || no_sol.exhausted;
+        }
+        Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no) {
+            Ordering::Less => {
+                best_trees.clear();
+                *best_cost = Some(branch_cost);
+                *exhausted_flag = false;
+                for y in &yes_sol.trees {
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            best_trees,
+                            limit,
+                            combine_positional_split(test_letter, test_position, req_letter, req_position, y, n),
+                        ) {
+                            *exhausted_flag = true;
+                            break;
+                        }
+                    }
+                    if *exhausted_flag {
+                        break;
+                    }
+                }
+                *exhausted_flag = *exhausted_flag || yes_sol.exhausted || no_sol.exhausted;
+            }
+            Ordering::Equal => {
+                for y in &yes_sol.trees {
+                    for n in &no_sol.trees {
+                        if !push_limited(
+                            best_trees,
+                            limit,
+                            combine_positional_split(test_letter, test_position, req_letter, req_position, y, n),
+                        ) {
+                            *exhausted_flag = true;
+                            break;
+                        }
+                    }
+                    if *exhausted_flag {
+                        break;
+                    }
+                }
+                *exhausted_flag = *exhausted_flag || yes_sol.exhausted || no_sol.exhausted;
+            }
+            Ordering::Greater => {}
+        },
+    }
+}
+
+/// Try to generate splits for a given position type with all systematized soft variants
+#[allow(clippy::too_many_arguments)]
+fn try_position_splits(
+    position: Position,
+    mask: u16,
+    ctx: &Context<'_>,
+    allow_repeat: bool,
+    prioritize_soft_no: bool,
+    constraints: &Constraints,
+    limit: Option<usize>,
+    memo: &mut HashMap<Key, Solution>,
+    best_cost: &mut Option<Cost>,
+    best_trees: &mut SmallVec<[NodeRef; 5]>,
+    exhausted_flag: &mut bool,
+) {
+    let position_masks = get_position_masks(ctx, position);
+
+    // Generate all partitions for this position
+    for (idx, yes, no) in partitions(mask, position_masks) {
+        let test_letter = (b'a' + idx as u8) as char;
+
+        // 1. Hard split (test == requirement)
+        if split_allowed(constraints, idx, idx) {
+            try_split(
+                mask,
+                yes,
+                no,
+                idx,
+                idx,
+                test_letter,
+                position,
+                test_letter,
+                position,
+                true, // is_hard
+                ctx,
+                allow_repeat,
+                prioritize_soft_no,
+                constraints,
+                limit,
+                memo,
+                best_cost,
+                best_trees,
+                exhausted_flag,
+            );
+        }
+
+        // 2. Soft split with reciprocal at same position
+        if let Some(reciprocal_idx) = get_reciprocal(idx) {
+            if split_allowed(constraints, idx, reciprocal_idx) {
+                let reciprocal_letter = (b'a' + reciprocal_idx as u8) as char;
+                // Check if all no items have the reciprocal at the same position
+                let reciprocal_masks = get_position_masks(ctx, position);
+                if no & reciprocal_masks[reciprocal_idx] == no {
+                    try_split(
+                        mask,
+                        yes,
+                        no,
+                        idx,
+                        reciprocal_idx,
+                        test_letter,
+                        position,
+                        reciprocal_letter,
+                        position,
+                        false, // is_soft
+                        ctx,
+                        allow_repeat,
+                        prioritize_soft_no,
+                        constraints,
+                        limit,
+                        memo,
+                        best_cost,
+                        best_trees,
+                        exhausted_flag,
+                    );
+                }
+            }
+        }
+
+        // 3. Soft splits with same letter at adjacent/mirror positions
+        generate_adjacent_soft_splits(
+            position,
+            idx,
+            yes,
+            no,
+            mask,
+            test_letter,
+            ctx,
+            allow_repeat,
+            prioritize_soft_no,
+            constraints,
+            limit,
+            memo,
+            best_cost,
+            best_trees,
+            exhausted_flag,
+        );
     }
 }
 
@@ -180,1189 +550,28 @@ pub(crate) fn solve(
         }
     }
 
-    for (idx, yes, no) in partitions(mask, &ctx.letter_masks) {
-        if !split_allowed(&constraints, idx, idx) {
-            continue;
+    // Generate all systematized splits for each position type
+    // Currently using 4 positions that the old code supported
+    // TODO: Improve constraint system to support all 9 position types (Second, Third, ThirdToLast, SecondToLast, Triple)
+    try_position_splits(Position::Contains, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::First, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::Last, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::Double, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    // These additional positions cause constraint exhaustion and need better exception handling:
+    // try_position_splits(Position::Second, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    // try_position_splits(Position::Third, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    // try_position_splits(Position::ThirdToLast, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    // try_position_splits(Position::SecondToLast, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    // try_position_splits(Position::Triple, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+
+    let sol = if let Some(cost) = best_cost {
+        Solution {
+            cost,
+            trees: best_trees.into_vec(),
+            exhausted,
         }
-
-        let letter_bit = 1u32 << idx;
-        // Hard contain split; allow primary letter reuse in the YES child only.
-        let (yes_constraints, no_constraints) = branch_constraints(
-            &constraints,
-            idx,
-            idx,
-            Some(letter_bit),
-            None,
-        );
-
-        let yes_sol = solve(
-            yes,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            yes_constraints,
-            limit,
-            memo,
-        );
-        let no_sol = solve(
-            no,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            no_constraints,
-            limit,
-            memo,
-        );
-
-        // Adding this split increases depth on both sides; the No branch increments both hard_nos and nos.
-        let yes_cost = yes_sol.cost;
-        let no_cost = Cost {
-            nos: no_sol.cost.nos + 1,
-            hard_nos: no_sol.cost.hard_nos + 1,
-            sum_nos: no_sol.cost.sum_nos,
-            sum_hard_nos: no_sol.cost.sum_hard_nos,
-            depth: no_sol.cost.depth,
-            word_count: no_sol.cost.word_count,
-        };
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1; // true tree height
-                                                                                     // Calculate weighted sums: words in no branch encounter 1 additional hard no edge
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos =
-            yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
-        let branch_cost = Cost {
-            nos,
-            hard_nos,
-            sum_nos: total_sum_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
-
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_children((b'a' + idx as u8) as char, y, n),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
-                    }
-                }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-            }
-            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    exhausted = false;
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_children((b'a' + idx as u8) as char, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_children((b'a' + idx as u8) as char, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Greater => {}
-            },
-        }
-    }
-
-    // Soft split options from SOFT_NO_PAIRS
-    for pair in SOFT_NO_PAIRS {
-        let test_idx = (pair.test_letter as u8 - b'a') as usize;
-        let requirement_idx = (pair.requirement_letter as u8 - b'a') as usize;
-
-        let test_bit = 1u32 << test_idx;
-        let requirement_bit = 1u32 << requirement_idx;
-
-        if !split_allowed(&constraints, test_idx, requirement_idx) {
-            continue;
-        }
-
-        let yes = mask & ctx.letter_masks[test_idx];
-        if yes == 0 || yes == mask {
-            continue; // does not partition the set
-        }
-        let no = mask & !ctx.letter_masks[test_idx];
-
-        // Check if all items in the "no" set contain the requirement letter
-        if no & ctx.letter_masks[requirement_idx] != no {
-            continue; // not all No items contain the requirement letter
-        }
-
-        let (yes_constraints, no_constraints) = branch_constraints(
-            &constraints,
-            test_idx,
-            requirement_idx,
-            Some(test_bit),  // soft contain can reuse P in YES
-            Some(requirement_bit), // soft contain can reuse S in NO
-        );
-        let yes_sol = solve(
-            yes,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            yes_constraints,
-            limit,
-            memo,
-        );
-        let no_sol = solve(
-            no,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            no_constraints,
-            limit,
-            memo,
-        );
-
-        // Soft split: No branch increments nos but leaves hard_nos unchanged.
-        let yes_cost = yes_sol.cost;
-        let no_cost = Cost {
-            nos: no_sol.cost.nos + 1,
-            hard_nos: no_sol.cost.hard_nos, // soft no does not increment hard_nos
-            sum_nos: no_sol.cost.sum_nos,
-            sum_hard_nos: no_sol.cost.sum_hard_nos,
-            depth: no_sol.cost.depth,
-            word_count: no_sol.cost.word_count,
-        };
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-        // Calculate weighted sums: words in no branch encounter 1 additional soft no edge
-        // (increments sum_nos but not sum_hard_nos)
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos; // no increment for soft no
-        let branch_cost = Cost {
-            nos,
-            hard_nos,
-            sum_nos: total_sum_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
-
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_soft_children(pair.test_letter, pair.requirement_letter, y, n),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
-                    }
-                }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-            }
-            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    exhausted = false;
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_children(
-                                    pair.test_letter,
-                                    pair.requirement_letter,
-                                    y,
-                                    n,
-                                ),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_children(
-                                    pair.test_letter,
-                                    pair.requirement_letter,
-                                    y,
-                                    n,
-                                ),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Greater => {}
-            },
-        }
-    }
-
-    // Soft double-letter splits: Yes has two of test_letter; No has two of a different uniform letter
-    for (test_idx, yes, no) in partitions(mask, &ctx.double_letter_masks) {
-        if !constraints.primary_allowed(test_idx) {
-            continue;
-        }
-
-        // Determine if all "no" words share a different double letter
-        let mut requirement_idx_opt: Option<usize> = None;
-        for idx in 0..26 {
-            if idx == test_idx {
-                continue;
-            }
-            let candidate = ctx.double_letter_masks[idx];
-            if candidate & no == no {
-                requirement_idx_opt = Some(idx);
-                break;
-            }
-        }
-        let requirement_idx = match requirement_idx_opt {
-            Some(i) => i,
-            None => continue, // no uniform double letter in no-branch
-        };
-
-        if !split_allowed(&constraints, test_idx, requirement_idx) {
-            continue;
-        }
-
-        let (yes_constraints, no_constraints) = branch_constraints(
-            &constraints,
-            test_idx,
-            requirement_idx,
-            None,
-            None,
-        );
-
-        let yes_sol = solve(
-            yes,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            yes_constraints,
-            limit,
-            memo,
-        );
-        let no_sol = solve(
-            no,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            no_constraints,
-            limit,
-            memo,
-        );
-
-        // Soft edge: increment nos, not hard_nos
-        let yes_cost = yes_sol.cost;
-        let no_cost = Cost {
-            nos: no_sol.cost.nos + 1,
-            hard_nos: no_sol.cost.hard_nos,
-            sum_nos: no_sol.cost.sum_nos,
-            sum_hard_nos: no_sol.cost.sum_hard_nos,
-            depth: no_sol.cost.depth,
-            word_count: no_sol.cost.word_count,
-        };
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
-        let branch_cost = Cost {
-            nos,
-            hard_nos,
-            sum_nos: total_sum_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
-
-        let test_letter = (b'a' + test_idx as u8) as char;
-        let requirement_letter = (b'a' + requirement_idx as u8) as char;
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_soft_double_letter_children(
-                                test_letter,
-                                requirement_letter,
-                                y,
-                                n,
-                            ),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
-                    }
-                }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-            }
-            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    exhausted = false;
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_double_letter_children(
-                                    test_letter,
-                                    requirement_letter,
-                                    y,
-                                    n,
-                                ),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_double_letter_children(
-                                    test_letter,
-                                    requirement_letter,
-                                    y,
-                                    n,
-                                ),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Greater => {}
-            },
-        }
-    }
-
-    // First-letter hard splits
-    for (idx, yes, no) in partitions(mask, &ctx.first_letter_masks) {
-        if !split_allowed(&constraints, idx, idx) {
-            continue;
-        }
-
-        let (yes_constraints, no_constraints) = branch_constraints(&constraints, idx, idx, None, None);
-        let yes_sol = solve(
-            yes,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            yes_constraints,
-            limit,
-            memo,
-        );
-        let no_sol = solve(
-            no,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            no_constraints,
-            limit,
-            memo,
-        );
-
-        // Hard split on first letter: same cost structure as regular hard split
-        let yes_cost = yes_sol.cost;
-        let no_cost = Cost {
-            nos: no_sol.cost.nos + 1,
-            hard_nos: no_sol.cost.hard_nos + 1,
-            sum_nos: no_sol.cost.sum_nos,
-            sum_hard_nos: no_sol.cost.sum_hard_nos,
-            depth: no_sol.cost.depth,
-            word_count: no_sol.cost.word_count,
-        };
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos =
-            yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
-        let branch_cost = Cost {
-            nos,
-            hard_nos,
-            sum_nos: total_sum_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
-
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_first_letter_children((b'a' + idx as u8) as char, y, n),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
-                    }
-                }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-            }
-            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    exhausted = false;
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_first_letter_children((b'a' + idx as u8) as char, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_first_letter_children((b'a' + idx as u8) as char, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Greater => {}
-            },
-        }
-    }
-
-    // Soft first-letter splits: test first letter, require all No items have the same letter as second letter
-    for (idx, yes, no) in partitions(mask, &ctx.first_letter_masks) {
-        if !split_allowed(&constraints, idx, idx) {
-            continue;
-        }
-
-        // Check if all items in the "no" set have the same letter as second letter
-        if no & ctx.second_letter_masks[idx] != no {
-            continue;
-        }
-
-        let (yes_constraints, no_constraints) =
-            branch_constraints(&constraints, idx, idx, None, None);
-        let yes_sol = solve(
-            yes,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            yes_constraints,
-            limit,
-            memo,
-        );
-        let no_sol = solve(
-            no,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            no_constraints,
-            limit,
-            memo,
-        );
-
-        // Soft split: nos increments, but hard_nos does not
-        let yes_cost = yes_sol.cost;
-        let no_cost = Cost {
-            nos: no_sol.cost.nos + 1,
-            hard_nos: no_sol.cost.hard_nos,
-            sum_nos: no_sol.cost.sum_nos,
-            sum_hard_nos: no_sol.cost.sum_hard_nos,
-            depth: no_sol.cost.depth,
-            word_count: no_sol.cost.word_count,
-        };
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
-        let branch_cost = Cost {
-            nos,
-            hard_nos,
-            sum_nos: total_sum_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
-
-        let letter = (b'a' + idx as u8) as char;
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_soft_first_letter_children(letter, letter, y, n),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
-                    }
-                }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-            }
-            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    exhausted = false;
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_first_letter_children(letter, letter, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_first_letter_children(letter, letter, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Greater => {}
-            },
-        }
-    }
-
-    // Positional mirror soft splits: test position from the start, require the mirror position from the end (1st↔last, 2nd↔second-to-last, 3rd↔third-to-last)
-    for pos in 1..=3 {
-        for idx in 0..26 {
-            if !split_allowed(&constraints, idx, idx) {
-                continue;
-            }
-            let yes = mask & position_mask(ctx, false, pos, idx);
-            if yes == 0 || yes == mask {
-                continue;
-            }
-            let no = mask & !position_mask(ctx, false, pos, idx);
-
-            // All No items must carry the same letter in the mirrored-from-end position
-            if no & position_mask(ctx, true, pos, idx) != no {
-                continue;
-            }
-
-            let (yes_constraints, no_constraints) =
-                branch_constraints(&constraints, idx, idx, None, None);
-            let yes_sol = solve(
-                yes,
-                ctx,
-                allow_repeat,
-                prioritize_soft_no,
-                yes_constraints,
-                limit,
-                memo,
-            );
-            let no_sol = solve(
-                no,
-                ctx,
-                allow_repeat,
-                prioritize_soft_no,
-                no_constraints,
-                limit,
-                memo,
-            );
-
-            let yes_cost = yes_sol.cost;
-            let no_cost = Cost {
-                nos: no_sol.cost.nos + 1,
-                hard_nos: no_sol.cost.hard_nos,
-                sum_nos: no_sol.cost.sum_nos,
-                sum_hard_nos: no_sol.cost.sum_hard_nos,
-                depth: no_sol.cost.depth,
-                word_count: no_sol.cost.word_count,
-            };
-            let nos = yes_cost.nos.max(no_cost.nos);
-            let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-            let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-            let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-            let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
-            let branch_cost = Cost {
-                nos,
-                hard_nos,
-                sum_nos: total_sum_nos,
-                sum_hard_nos: total_sum_hard_nos,
-                depth: branch_depth,
-                word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-            };
-
-            let letter = (b'a' + idx as u8) as char;
-            match best_cost {
-                None => {
-                    best_cost = Some(branch_cost);
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_mirror_pos_children(
-                                    letter, pos, false, pos, true, y, n,
-                                ),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                    Ordering::Less => {
-                        best_trees.clear();
-                        best_cost = Some(branch_cost);
-                        exhausted = false;
-                        for y in &yes_sol.trees {
-                            for n in &no_sol.trees {
-                                if !push_limited(
-                                    &mut best_trees,
-                                    limit,
-                                    combine_soft_mirror_pos_children(
-                                        letter, pos, false, pos, true, y, n,
-                                    ),
-                                ) {
-                                    exhausted = true;
-                                    break;
-                                }
-                            }
-                            if exhausted {
-                                break;
-                            }
-                        }
-                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                    }
-                    Ordering::Equal => {
-                        for y in &yes_sol.trees {
-                            for n in &no_sol.trees {
-                                if !push_limited(
-                                    &mut best_trees,
-                                    limit,
-                                    combine_soft_mirror_pos_children(
-                                        letter, pos, false, pos, true, y, n,
-                                    ),
-                                ) {
-                                    exhausted = true;
-                                    break;
-                                }
-                            }
-                            if exhausted {
-                                break;
-                            }
-                        }
-                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                    }
-                    Ordering::Greater => {}
-                },
-            }
-        }
-    }
-
-    // Positional mirror soft splits: test position from the end, require the mirror position from the start (last↔first, etc.)
-    for pos in 1..=3 {
-        for idx in 0..26 {
-            if !split_allowed(&constraints, idx, idx) {
-                continue;
-            }
-            let yes = mask & position_mask(ctx, true, pos, idx);
-            if yes == 0 || yes == mask {
-                continue;
-            }
-            let no = mask & !position_mask(ctx, true, pos, idx);
-
-            // All No items must carry the same letter in the mirrored-from-start position
-            if no & position_mask(ctx, false, pos, idx) != no {
-                continue;
-            }
-
-            let (yes_constraints, no_constraints) =
-                branch_constraints(&constraints, idx, idx, None, None);
-            let yes_sol = solve(
-                yes,
-                ctx,
-                allow_repeat,
-                prioritize_soft_no,
-                yes_constraints,
-                limit,
-                memo,
-            );
-            let no_sol = solve(
-                no,
-                ctx,
-                allow_repeat,
-                prioritize_soft_no,
-                no_constraints,
-                limit,
-                memo,
-            );
-
-            let yes_cost = yes_sol.cost;
-            let no_cost = Cost {
-                nos: no_sol.cost.nos + 1,
-                hard_nos: no_sol.cost.hard_nos,
-                sum_nos: no_sol.cost.sum_nos,
-                sum_hard_nos: no_sol.cost.sum_hard_nos,
-                depth: no_sol.cost.depth,
-                word_count: no_sol.cost.word_count,
-            };
-            let nos = yes_cost.nos.max(no_cost.nos);
-            let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-            let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-            let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-            let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
-            let branch_cost = Cost {
-                nos,
-                hard_nos,
-                sum_nos: total_sum_nos,
-                sum_hard_nos: total_sum_hard_nos,
-                depth: branch_depth,
-                word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-            };
-
-            let letter = (b'a' + idx as u8) as char;
-            match best_cost {
-                None => {
-                    best_cost = Some(branch_cost);
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_mirror_pos_children(
-                                    letter, pos, true, pos, false, y, n,
-                                ),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                    Ordering::Less => {
-                        best_trees.clear();
-                        best_cost = Some(branch_cost);
-                        exhausted = false;
-                        for y in &yes_sol.trees {
-                            for n in &no_sol.trees {
-                                if !push_limited(
-                                    &mut best_trees,
-                                    limit,
-                                    combine_soft_mirror_pos_children(
-                                        letter, pos, true, pos, false, y, n,
-                                    ),
-                                ) {
-                                    exhausted = true;
-                                    break;
-                                }
-                            }
-                            if exhausted {
-                                break;
-                            }
-                        }
-                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                    }
-                    Ordering::Equal => {
-                        for y in &yes_sol.trees {
-                            for n in &no_sol.trees {
-                                if !push_limited(
-                                    &mut best_trees,
-                                    limit,
-                                    combine_soft_mirror_pos_children(
-                                        letter, pos, true, pos, false, y, n,
-                                    ),
-                                ) {
-                                    exhausted = true;
-                                    break;
-                                }
-                            }
-                            if exhausted {
-                                break;
-                            }
-                        }
-                        exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                    }
-                    Ordering::Greater => {}
-                },
-            }
-        }
-    }
-
-    // Last-letter hard splits
-    for (idx, yes, no) in partitions(mask, &ctx.last_letter_masks) {
-        if !split_allowed(&constraints, idx, idx) {
-            continue;
-        }
-
-        let (yes_constraints, no_constraints) = branch_constraints(&constraints, idx, idx, None, None);
-        let yes_sol = solve(
-            yes,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            yes_constraints,
-            limit,
-            memo,
-        );
-        let no_sol = solve(
-            no,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            no_constraints,
-            limit,
-            memo,
-        );
-
-        // Hard split on last letter: same cost structure as regular hard split
-        let yes_cost = yes_sol.cost;
-        let no_cost = Cost {
-            nos: no_sol.cost.nos + 1,
-            hard_nos: no_sol.cost.hard_nos + 1,
-            sum_nos: no_sol.cost.sum_nos,
-            sum_hard_nos: no_sol.cost.sum_hard_nos,
-            depth: no_sol.cost.depth,
-            word_count: no_sol.cost.word_count,
-        };
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos =
-            yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count;
-        let branch_cost = Cost {
-            nos,
-            hard_nos,
-            sum_nos: total_sum_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
-
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_last_letter_children((b'a' + idx as u8) as char, y, n),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
-                    }
-                }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-            }
-            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    exhausted = false;
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_last_letter_children((b'a' + idx as u8) as char, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_last_letter_children((b'a' + idx as u8) as char, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Greater => {}
-            },
-        }
-    }
-
-    // Soft last-letter splits: test last letter, require all No items have the same letter as second-to-last letter
-    for (idx, yes, no) in partitions(mask, &ctx.last_letter_masks) {
-        if !split_allowed(&constraints, idx, idx) {
-            continue;
-        }
-
-        // Check if all items in the "no" set have the same letter as second-to-last letter
-        if no & ctx.second_to_last_letter_masks[idx] != no {
-            continue;
-        }
-
-        let (yes_constraints, no_constraints) =
-            branch_constraints(&constraints, idx, idx, None, None);
-        let yes_sol = solve(
-            yes,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            yes_constraints,
-            limit,
-            memo,
-        );
-        let no_sol = solve(
-            no,
-            ctx,
-            allow_repeat,
-            prioritize_soft_no,
-            no_constraints,
-            limit,
-            memo,
-        );
-
-        // Soft split: nos increments, but hard_nos does not
-        let yes_cost = yes_sol.cost;
-        let no_cost = Cost {
-            nos: no_sol.cost.nos + 1,
-            hard_nos: no_sol.cost.hard_nos,
-            sum_nos: no_sol.cost.sum_nos,
-            sum_hard_nos: no_sol.cost.sum_hard_nos,
-            depth: no_sol.cost.depth,
-            word_count: no_sol.cost.word_count,
-        };
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = std::cmp::max(yes_sol.cost.depth, no_sol.cost.depth) + 1;
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos;
-        let branch_cost = Cost {
-            nos,
-            hard_nos,
-            sum_nos: total_sum_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
-
-        let letter = (b'a' + idx as u8) as char;
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_soft_last_letter_children(letter, letter, y, n),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
-                    }
-                }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-            }
-            Some(current) => match compare_costs(&branch_cost, &current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    exhausted = false;
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_last_letter_children(letter, letter, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_soft_last_letter_children(letter, letter, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
-                        }
-                    }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
-                }
-                Ordering::Greater => {}
-            },
-        }
-    }
-
-    let sol = Solution {
-        cost: best_cost.expect("At least one tree must be found"),
-        trees: best_trees.into_vec(),
-        exhausted,
+    } else {
+        panic!("At least one tree must be found");
     };
     memo.insert(key, sol.clone());
     sol
