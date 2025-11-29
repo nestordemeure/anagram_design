@@ -12,11 +12,8 @@ use crate::context::{Context, mask_count, single_word_from_mask, partitions,
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Key {
     mask: u16,
-    allow_repeat: bool,
-    prioritize_soft_no: bool,
-    forbidden_primary: u32,
-    forbidden_secondary: u32,
-    allowed_primary_once: u32,
+    forbidden: u32,              // Merged forbidden_primary | forbidden_secondary
+    allowed_primary_once: u32,   // Must keep: affects which splits are legal
 }
 
 fn push_limited(target: &mut SmallVec<[NodeRef; 5]>, limit: Option<usize>, node: NodeRef) -> bool {
@@ -194,11 +191,51 @@ fn try_split(
         no_allow,
     );
 
-    let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_constraints, limit, memo);
+    // STRATEGY: Solve no branch first (where cost tends to be) for better pruning
     let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, no_constraints, limit, memo);
 
-    // Skip this split if either branch is unsolvable
-    if yes_sol.is_unsolvable() || no_sol.is_unsolvable() {
+    // Early termination: if no branch is unsolvable, skip this split
+    if no_sol.is_unsolvable() {
+        return;
+    }
+
+    // Pruning optimization: check if even the best possible yes branch would exceed best_cost
+    // Since no branch is solved, we have actual no_cost; check if best-case yes would help
+    if let Some(ref current_best) = *best_cost {
+        // Calculate actual no_cost with split overhead
+        let no_cost_nos = no_sol.cost.nos + 1; // split always adds 1 to nos
+        let no_cost_hard_nos = if is_hard {
+            no_sol.cost.hard_nos + 1
+        } else {
+            no_sol.cost.hard_nos
+        };
+
+        // Lower bound for yes branch: best case is 0 cost
+        let min_yes_nos = 0;
+        let min_yes_hard_nos = 0;
+
+        // Combined lower bound cost (max of yes and no branches)
+        let lower_bound_nos = no_cost_nos.max(min_yes_nos);
+        let lower_bound_hard_nos = no_cost_hard_nos.max(min_yes_hard_nos);
+
+        // Quick pruning check: if even the best case exceeds best_cost on primary criteria, skip
+        let can_prune = if prioritize_soft_no {
+            lower_bound_hard_nos > current_best.hard_nos
+                || (lower_bound_hard_nos == current_best.hard_nos && lower_bound_nos > current_best.nos)
+        } else {
+            lower_bound_nos > current_best.nos
+                || (lower_bound_nos == current_best.nos && lower_bound_hard_nos > current_best.hard_nos)
+        };
+
+        if can_prune {
+            return;
+        }
+    }
+
+    let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_constraints, limit, memo);
+
+    // Skip this split if yes branch is unsolvable
+    if yes_sol.is_unsolvable() {
         return;
     }
 
@@ -327,35 +364,11 @@ fn try_position_splits(
     let position_masks = get_position_masks(ctx, position);
 
     // Generate all partitions for this position
+    // STRATEGY: Try soft splits before hard splits (soft is cheaper, finds better solutions earlier)
     for (idx, yes, no) in partitions(mask, position_masks) {
         let test_letter = (b'a' + idx as u8) as char;
 
-        // 1. Hard split (test == requirement)
-        if split_allowed(constraints, idx, idx, position) {
-            try_split(
-                mask,
-                yes,
-                no,
-                idx,
-                idx,
-                test_letter,
-                position,
-                test_letter,
-                position,
-                true, // is_hard
-                ctx,
-                allow_repeat,
-                prioritize_soft_no,
-                constraints,
-                limit,
-                memo,
-                best_cost,
-                best_trees,
-                exhausted_flag,
-            );
-        }
-
-        // 2. Soft split with reciprocal at same position
+        // 1. Soft split with reciprocal at same position (SOFT - try first)
         if let Some(reciprocal_idx) = get_reciprocal(idx) {
             if split_allowed(constraints, idx, reciprocal_idx, position) {
                 let reciprocal_letter = (b'a' + reciprocal_idx as u8) as char;
@@ -387,7 +400,7 @@ fn try_position_splits(
             }
         }
 
-        // 3. Soft splits with same letter at adjacent/mirror positions
+        // 2. Soft splits with same letter at adjacent/mirror positions (SOFT - try second)
         generate_adjacent_soft_splits(
             position,
             idx,
@@ -405,6 +418,31 @@ fn try_position_splits(
             best_trees,
             exhausted_flag,
         );
+
+        // 3. Hard split (test == requirement) (HARD - try last)
+        if split_allowed(constraints, idx, idx, position) {
+            try_split(
+                mask,
+                yes,
+                no,
+                idx,
+                idx,
+                test_letter,
+                position,
+                test_letter,
+                position,
+                true, // is_hard
+                ctx,
+                allow_repeat,
+                prioritize_soft_no,
+                constraints,
+                limit,
+                memo,
+                best_cost,
+                best_trees,
+                exhausted_flag,
+            );
+        }
     }
 }
 
@@ -422,10 +460,7 @@ pub(crate) fn solve(
 
     let key = Key {
         mask,
-        allow_repeat,
-        prioritize_soft_no,
-        forbidden_primary: constraints.forbidden_primary,
-        forbidden_secondary: constraints.forbidden_secondary,
+        forbidden: constraints.forbidden_primary | constraints.forbidden_secondary,
         allowed_primary_once: constraints.allowed_primary_once,
     };
     if let Some(hit) = memo.get(&key) {
