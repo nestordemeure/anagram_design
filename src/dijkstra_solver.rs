@@ -16,15 +16,6 @@ pub(crate) struct Key {
     allowed_primary_once: u32,
 }
 
-fn push_limited(target: &mut SmallVec<[NodeRef; 5]>, limit: Option<usize>, node: NodeRef) -> bool {
-    match limit {
-        Some(max) if target.len() >= max => false,
-        _ => {
-            target.push(node);
-            true
-        }
-    }
-}
 
 const fn get_position_masks<'a>(ctx: &'a Context<'a>, position: Position) -> &'a [Mask; 26] {
     match position {
@@ -214,7 +205,6 @@ pub(crate) fn solve(
     allow_repeat: bool,
     prioritize_soft_no: bool,
     constraints: Constraints,
-    limit: Option<usize>,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
     let present_letters = letters_present(mask, ctx);
@@ -240,7 +230,6 @@ pub(crate) fn solve(
                 word_count: 1,
             },
             trees: vec![Rc::new(Node::Leaf(word))],
-            exhausted: false,
         };
         memo.insert(key, sol.clone());
         return sol;
@@ -294,7 +283,6 @@ pub(crate) fn solve(
 
     let mut best_cost: Option<Cost> = None;
     let mut best_trees: SmallVec<[NodeRef; 5]> = SmallVec::new();
-    let mut exhausted = false;
 
     // Try Repeat nodes first (if allowed)
     if allow_repeat && count >= 2 {
@@ -311,7 +299,6 @@ pub(crate) fn solve(
                 false,
                 prioritize_soft_no,
                 constraints,
-                limit,
                 memo,
             );
 
@@ -341,55 +328,30 @@ pub(crate) fn solve(
                 None => {
                     best_cost = Some(branch_cost);
                     for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            Rc::new(Node::Repeat {
-                                word: word.clone(),
-                                no: Rc::clone(n),
-                            }),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
+                        best_trees.push(Rc::new(Node::Repeat {
+                            word: word.clone(),
+                            no: Rc::clone(n),
+                        }));
                     }
-                    exhausted = exhausted || no_sol.exhausted;
                 }
                 Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no) {
                     Ordering::Less => {
                         best_trees.clear();
                         best_cost = Some(branch_cost);
-                        exhausted = false;
                         for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                Rc::new(Node::Repeat {
-                                    word: word.clone(),
-                                    no: Rc::clone(n),
-                                }),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
+                            best_trees.push(Rc::new(Node::Repeat {
+                                word: word.clone(),
+                                no: Rc::clone(n),
+                            }));
                         }
-                        exhausted = exhausted || no_sol.exhausted;
                     }
                     Ordering::Equal => {
                         for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                Rc::new(Node::Repeat {
-                                    word: word.clone(),
-                                    no: Rc::clone(n),
-                                }),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
+                            best_trees.push(Rc::new(Node::Repeat {
+                                word: word.clone(),
+                                no: Rc::clone(n),
+                            }));
                         }
-                        exhausted = exhausted || no_sol.exhausted;
                     }
                     Ordering::Greater => {}
                 },
@@ -425,7 +387,7 @@ pub(crate) fn solve(
         );
 
         // Solve children recursively
-        let no_sol = solve(spec.no, ctx, allow_repeat, prioritize_soft_no, no_constraints, limit, memo);
+        let no_sol = solve(spec.no, ctx, allow_repeat, prioritize_soft_no, no_constraints, memo);
 
         if no_sol.is_unsolvable() {
             continue;
@@ -453,7 +415,7 @@ pub(crate) fn solve(
             }
         }
 
-        let yes_sol = solve(spec.yes, ctx, allow_repeat, prioritize_soft_no, yes_constraints, limit, memo);
+        let yes_sol = solve(spec.yes, ctx, allow_repeat, prioritize_soft_no, yes_constraints, memo);
 
         if yes_sol.is_unsolvable() {
             continue;
@@ -506,63 +468,35 @@ pub(crate) fn solve(
                 best_cost = Some(branch_cost);
                 for y in &yes_sol.trees {
                     for n in &no_sol.trees {
-                        if !push_limited(
-                            &mut best_trees,
-                            limit,
-                            combine_positional_split(spec.test_letter, spec.test_position,
-                                                    spec.req_letter, spec.req_position, y, n),
-                        ) {
-                            exhausted = true;
-                            break;
-                        }
-                    }
-                    if exhausted {
-                        break;
+                        best_trees.push(combine_positional_split(
+                            spec.test_letter, spec.test_position,
+                            spec.req_letter, spec.req_position, y, n
+                        ));
                     }
                 }
-                exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
             }
             Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no) {
                 Ordering::Less => {
                     best_trees.clear();
                     best_cost = Some(branch_cost);
-                    exhausted = false;
                     for y in &yes_sol.trees {
                         for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_positional_split(spec.test_letter, spec.test_position,
-                                                        spec.req_letter, spec.req_position, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
+                            best_trees.push(combine_positional_split(
+                                spec.test_letter, spec.test_position,
+                                spec.req_letter, spec.req_position, y, n
+                            ));
                         }
                     }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
                 }
                 Ordering::Equal => {
                     for y in &yes_sol.trees {
                         for n in &no_sol.trees {
-                            if !push_limited(
-                                &mut best_trees,
-                                limit,
-                                combine_positional_split(spec.test_letter, spec.test_position,
-                                                        spec.req_letter, spec.req_position, y, n),
-                            ) {
-                                exhausted = true;
-                                break;
-                            }
-                        }
-                        if exhausted {
-                            break;
+                            best_trees.push(combine_positional_split(
+                                spec.test_letter, spec.test_position,
+                                spec.req_letter, spec.req_position, y, n
+                            ));
                         }
                     }
-                    exhausted = exhausted || yes_sol.exhausted || no_sol.exhausted;
                 }
                 Ordering::Greater => {}
             },
@@ -573,7 +507,6 @@ pub(crate) fn solve(
         Solution {
             cost,
             trees: best_trees.into_vec(),
-            exhausted,
         }
     } else {
         Solution::unsolvable(mask_count(mask))

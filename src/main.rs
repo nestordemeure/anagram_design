@@ -1,4 +1,4 @@
-use anagram_design::{format_tree, minimal_trees_limited};
+use anagram_design::{format_tree, minimal_trees};
 
 fn zodiac_words() -> Vec<String> {
     vec![
@@ -24,7 +24,7 @@ fn print_solutions(allow_repeat: bool, prioritize_soft_no: bool) {
     let words = zodiac_words();
     let word_count = words.len() as u32;
     const DISPLAY: usize = 5;
-    let result = minimal_trees_limited(&words, allow_repeat, prioritize_soft_no, Some(DISPLAY));
+    let result = minimal_trees(&words, allow_repeat, prioritize_soft_no);
     let preview = DISPLAY.min(result.trees.len());
     let avg_sum_hard = result.cost.sum_hard_nos as f32 / word_count as f32;
     let avg_sum = result.cost.sum_nos as f32 / word_count as f32;
@@ -44,16 +44,7 @@ fn print_solutions(allow_repeat: bool, prioritize_soft_no: bool) {
     }
     if result.trees.len() > preview {
         let more = result.trees.len() - preview;
-        if result.exhausted {
-            println!(
-                "... {} stored (limit reached, more optimal trees exist)",
-                more
-            );
-        } else {
-            println!("... {} more optimal tree(s) omitted", more);
-        }
-    } else if result.exhausted {
-        println!("(Result list truncated; additional optimal trees exist)");
+        println!("... {} more optimal tree(s) omitted from display", more);
     }
 }
 

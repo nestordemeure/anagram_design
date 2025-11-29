@@ -15,7 +15,7 @@ pub mod wasm;
 pub use cost::{Cost, compare_costs};
 pub use node::{Node, NodeRef, Solution};
 pub use format::format_tree;
-pub use api::{minimal_trees, minimal_trees_limited};
+pub use api::minimal_trees;
 pub use merged::{MergedNode, MergedOption, NodeInfo};
 
 // Re-export WASM bindings (they have their own #[wasm_bindgen] attributes)
@@ -124,8 +124,8 @@ mod tests {
             "aquarius",
             "pisces",
         ]);
-        let allow_repeat = minimal_trees_limited(&data, true, true, Some(1));
-        let no_repeat = minimal_trees_limited(&data, false, true, Some(1));
+        let allow_repeat = minimal_trees(&data, true, true);
+        let no_repeat = minimal_trees(&data, false, true);
         // With all 9 position types enabled, we achieve even better (lower) sum_hard_nos costs
         // by using more positional soft splits
         assert_eq!(
@@ -193,7 +193,7 @@ mod tests {
     fn soft_double_letter_split_works() {
         // With all position types, the solver can find various valid solutions
         let data = words(&["book", "pool", "ball", "tall"]);
-        let sol = minimal_trees_limited(&data, false, true, Some(1));
+        let sol = minimal_trees(&data, false, true);
 
         // Check that we get a reasonable cost
         assert_eq!(
@@ -218,7 +218,7 @@ mod tests {
     fn soft_mirror_first_last_split_works() {
         // Front test, back requirement mirror keeps the miss soft
         let data = words(&["axe", "exa"]);
-        let sol = minimal_trees_limited(&data, false, true, Some(1));
+        let sol = minimal_trees(&data, false, true);
         assert_eq!(
             sol.cost,
             Cost {

@@ -166,16 +166,14 @@ function takeFromExternrefTable0(idx) {
     return value;
 }
 /**
- * WebAssembly entry point: solve for the provided words and return the top trees.
- * `limit = 0` means "no limit".
+ * WebAssembly entry point: solve for the provided words and return all optimal trees.
  * @param {any} words
  * @param {boolean} allow_repeat
  * @param {boolean} prioritize_soft_no
- * @param {number} limit
  * @returns {any}
  */
-export function solve_words(words, allow_repeat, prioritize_soft_no, limit) {
-    const ret = wasm.solve_words(words, allow_repeat, prioritize_soft_no, limit);
+export function solve_words(words, allow_repeat, prioritize_soft_no) {
+    const ret = wasm.solve_words(words, allow_repeat, prioritize_soft_no);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }

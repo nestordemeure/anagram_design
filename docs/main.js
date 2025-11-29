@@ -3,7 +3,6 @@ import init, { solve_words, zodiac_words } from "./pkg/anagram_design.js";
 const wordsField = document.querySelector("#words");
 const allowRepeatField = document.querySelector("#allow-repeat");
 const prioritizeSoftField = document.querySelector("#prioritize-soft");
-const limitField = document.querySelector("#limit");
 const statusEl = document.querySelector("#status");
 const summaryEl = document.querySelector("#summary");
 const treesEl = document.querySelector("#trees");
@@ -405,7 +404,7 @@ function attachChoiceHandlers(choices) {
 function renderResult(result) {
   window.currentResult = result; // Store for re-rendering
 
-  const { cost, merged_tree: mergedTree, exhausted } = result;
+  const { cost, merged_tree: mergedTree } = result;
 
   const { html, choices } = renderMergedTree(mergedTree);
 
@@ -420,13 +419,6 @@ function renderResult(result) {
       <pre>${html}</pre>
     </article>
   `;
-
-  if (exhausted) {
-    treesEl.insertAdjacentHTML(
-      "beforeend",
-      `<p><small>Results were truncated; more optimal trees exist beyond the requested limit.</small></p>`
-    );
-  }
 
   // Cost summary goes below the tree
   const summaryText = `
@@ -444,16 +436,13 @@ async function runSolver(event) {
   await wasmReady;
 
   const words = parseWords();
-  const limit = Number.parseInt(limitField.value, 10);
-  const normalizedLimit = Number.isFinite(limit) ? Math.max(0, limit) : 5;
 
   try {
     setStatus("Generating…");
     const result = solve_words(
       words,
       allowRepeatField.checked,
-      prioritizeSoftField.checked,
-      normalizedLimit
+      prioritizeSoftField.checked
     );
     renderResult(result);
     setStatus("");

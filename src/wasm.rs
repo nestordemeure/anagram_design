@@ -3,7 +3,7 @@ use serde_wasm_bindgen::{from_value, to_value};
 use wasm_bindgen::prelude::*;
 
 use crate::node::Solution;
-use crate::api::minimal_trees_limited;
+use crate::api::minimal_trees;
 use crate::merged::MergedNode;
 
 #[derive(Serialize)]
@@ -22,7 +22,6 @@ struct WasmCostSummary {
 struct WasmSolution {
     cost: WasmCostSummary,
     merged_tree: MergedNode,
-    exhausted: bool,
 }
 
 fn words_from_js(value: JsValue) -> Result<Vec<String>, JsValue> {
@@ -58,18 +57,15 @@ fn summary_from_solution(sol: &Solution) -> WasmSolution {
             avg_nos,
         },
         merged_tree,
-        exhausted: sol.exhausted,
     }
 }
 
-/// WebAssembly entry point: solve for the provided words and return the top trees.
-/// `limit = 0` means "no limit".
+/// WebAssembly entry point: solve for the provided words and return all optimal trees.
 #[wasm_bindgen]
 pub fn solve_words(
     words: JsValue,
     allow_repeat: bool,
     prioritize_soft_no: bool,
-    limit: u32,
 ) -> Result<JsValue, JsValue> {
     let words_vec = words_from_js(words)?;
     if words_vec.is_empty() {
@@ -79,12 +75,7 @@ pub fn solve_words(
         return Err(JsValue::from_str("Solver supports up to 32 words."));
     }
 
-    let limit = if limit == 0 {
-        None
-    } else {
-        Some(limit as usize)
-    };
-    let sol = minimal_trees_limited(&words_vec, allow_repeat, prioritize_soft_no, limit);
+    let sol = minimal_trees(&words_vec, allow_repeat, prioritize_soft_no);
     to_value(&summary_from_solution(&sol))
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
 }

@@ -63,7 +63,6 @@ pub type NodeRef = Rc<Node>;
 pub struct Solution {
     pub cost: Cost,
     pub trees: Vec<NodeRef>,
-    pub exhausted: bool,
 }
 
 impl Solution {
@@ -84,7 +83,6 @@ impl Solution {
                 word_count,
             },
             trees: Vec::new(),
-            exhausted: false,
         }
     }
 }
