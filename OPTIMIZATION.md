@@ -230,3 +230,74 @@ This is BY FAR the biggest single win! The memoization optimization alone delive
 
 ---
 
+## Attempt #6: Tighter Lower Bound for Pruning ❌
+
+**Branch**: `optim` (reverted)
+**Date**: 2025-11-28
+
+### Hypothesis
+The current pruning uses `min_yes_nos = 0` as a lower bound, assuming the YES branch could theoretically need 0 splits. This is very loose. A tighter estimate:
+- If YES has 2+ words without repeat → need at least 1 split
+- If YES has 3+ words with repeat → need at least 1 split
+
+This should enable more aggressive pruning.
+
+### Implementation
+```rust
+let yes_word_count = mask_count(yes);
+let min_yes_nos = if allow_repeat {
+    if yes_word_count >= 3 { 1 } else { 0 }
+} else {
+    if yes_word_count >= 2 { 1 } else { 0 }
+};
+```
+
+### Results
+- **Runtime**: 51.1 seconds
+- **Change**: **1.09x SLOWDOWN** (worse than 46.8s baseline)
+- **Status**: ❌ Reverted
+
+### Analysis
+**FAILED**: The overhead of calling `mask_count(yes)` on every `try_split()` invocation outweighed the benefit of tighter pruning.
+
+**Why it failed**:
+- `try_split()` is called VERY frequently (millions of times)
+- `mask_count()` has a cost (popcount operation)
+- The pruning condition fires relatively rarely
+- When it does fire, min_yes_nos = 1 vs min_yes_nos = 0 doesn't enable much extra pruning (no_cost_nos is usually already > 1)
+
+**Lesson learned**: Even cheap operations (like popcount) become expensive bottlenecks when called in tight inner loops. Profile-driven optimization is essential - intuitive "improvements" can backfire!
+
+---
+
+## Attempt #7: Lower Bound for NO Branch ❌
+
+**Branch**: `optim` (reverted)
+**Date**: 2025-11-28
+
+### Hypothesis
+Following up on Attempt #6, check a lower bound for the NO branch BEFORE solving it. If even the NO lower bound + best-case YES (0 cost) exceeds best_cost, skip the entire split without solving either branch.
+
+**Trade-off**: One `mask_count(no)` call vs potentially skipping an expensive `solve()` call.
+
+### Results
+- **Status**: ❌ Test failure (breaks correctness)
+- **Error**: Found sum_hard_nos:4, expected sum_hard_nos:3 (found suboptimal solution)
+
+### Analysis
+**FAILED**: The lower bound was too optimistic, causing us to prune splits that lead to optimal solutions.
+
+**Why it failed**:
+- Lower bound assumes all required splits could be **soft** (min_hard_nos = 0 if soft possible)
+- In practice, **constraints force hard splits** even when soft splits would be theoretically possible
+- Pruning based on this optimistic bound cuts off paths to optimal trees
+
+**Lesson learned**: Simple word-count-based lower bounds don't capture constraint complexity. A tighter bound would need to account for:
+1. Available letter distribution
+2. Forbidden letter constraints
+3. Whether soft split reciprocals actually exist in the word set
+
+Such analysis would be more expensive than the solve() calls we're trying to avoid!
+
+---
+
