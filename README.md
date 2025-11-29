@@ -157,6 +157,8 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 ## TODO
 
 * further optimizations
+  * use perf / flamegraph to explore costs
+  * try a dijkstra type of algorithm instead as this problem might be a fit
 
 * further subtleties (new soft constraints):
   * introduce sounds-based subtleties
