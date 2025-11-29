@@ -3,7 +3,7 @@ pub mod cost;
 pub mod node;
 pub mod constraints;
 pub mod context;
-pub mod solver;
+pub mod dijkstra_solver;
 pub mod format;
 pub mod api;
 pub mod merged;
