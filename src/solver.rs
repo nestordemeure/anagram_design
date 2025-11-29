@@ -76,7 +76,7 @@ fn generate_adjacent_soft_splits(
     };
 
     for req_position in soft_requirement_positions {
-        if !split_allowed(constraints, test_idx, test_idx) {
+        if !split_allowed(constraints, test_idx, test_idx, test_position) {
             continue;
         }
 
@@ -116,7 +116,7 @@ fn generate_adjacent_soft_splits(
                 continue;
             }
             if no & req_masks[req_idx] == no {
-                if split_allowed(constraints, test_idx, req_idx) {
+                if split_allowed(constraints, test_idx, req_idx, test_position) {
                     let req_letter = (b'a' + req_idx as u8) as char;
                     try_split(
                         mask,
@@ -189,6 +189,7 @@ fn try_split(
         constraints,
         test_idx,
         req_idx,
+        test_position,
         yes_allow,
         no_allow,
     );
@@ -330,7 +331,7 @@ fn try_position_splits(
         let test_letter = (b'a' + idx as u8) as char;
 
         // 1. Hard split (test == requirement)
-        if split_allowed(constraints, idx, idx) {
+        if split_allowed(constraints, idx, idx, position) {
             try_split(
                 mask,
                 yes,
@@ -356,7 +357,7 @@ fn try_position_splits(
 
         // 2. Soft split with reciprocal at same position
         if let Some(reciprocal_idx) = get_reciprocal(idx) {
-            if split_allowed(constraints, idx, reciprocal_idx) {
+            if split_allowed(constraints, idx, reciprocal_idx, position) {
                 let reciprocal_letter = (b'a' + reciprocal_idx as u8) as char;
                 // Check if all no items have the reciprocal at the same position
                 let reciprocal_masks = get_position_masks(ctx, position);

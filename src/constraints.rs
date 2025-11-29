@@ -1,3 +1,29 @@
+use crate::node::Position;
+
+/// Split classes for constraint exceptions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SplitClass {
+    Contains = 0,
+    Positional = 1,
+    DoubleTriple = 2,
+}
+
+/// Get the class of a position
+pub fn position_class(pos: Position) -> SplitClass {
+    match pos {
+        Position::Contains => SplitClass::Contains,
+        Position::First | Position::Second | Position::Third |
+        Position::ThirdToLast | Position::SecondToLast | Position::Last => SplitClass::Positional,
+        Position::Double | Position::Triple => SplitClass::DoubleTriple,
+    }
+}
+
+/// Check if a child can use the parent's letter based on class movement
+/// (same-class or downward: Contains -> Positional -> DoubleTriple)
+pub fn can_chain_exception(parent_pos: Position, child_pos: Position) -> bool {
+    position_class(child_pos) >= position_class(parent_pos)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Constraints {
     /// Letters forbidden as primary letters in this subtree
@@ -7,6 +33,12 @@ pub struct Constraints {
     /// Letters that are temporarily allowed as primary for the *first* split in this subtree
     /// (used for the contain exceptions)
     pub allowed_primary_once: u32,
+    /// The position of the parent split (for determining if exceptions can chain)
+    pub parent_position: Option<Position>,
+    /// The primary letter of the parent split (for chaining exceptions)
+    pub parent_primary: Option<usize>,
+    /// The secondary letter of the parent split (for chaining exceptions in no branch)
+    pub parent_secondary: Option<usize>,
 }
 
 impl Constraints {
@@ -15,12 +47,47 @@ impl Constraints {
             forbidden_primary: 0,
             forbidden_secondary: 0,
             allowed_primary_once: 0,
+            parent_position: None,
+            parent_primary: None,
+            parent_secondary: None,
         }
     }
 
-    pub fn primary_allowed(&self, idx: usize) -> bool {
+    pub fn primary_allowed(&self, idx: usize, child_pos: Position) -> bool {
         let bit = 1u32 << idx;
-        (self.forbidden_primary & bit == 0) || (self.allowed_primary_once & bit != 0)
+
+        // Check if not forbidden (always allowed)
+        if self.forbidden_primary & bit == 0 {
+            return true;
+        }
+
+        // Check if allowed via immediate-child exception (must verify class movement)
+        if self.allowed_primary_once & bit != 0 {
+            // Verify class movement is valid (same-class or downward)
+            if let Some(parent_pos) = self.parent_position {
+                if can_chain_exception(parent_pos, child_pos) {
+                    return true;
+                }
+            } else {
+                // No parent info means root level, allow for backward compatibility
+                return true;
+            }
+        }
+
+        // Check for chaining exceptions (for continuing chains)
+        if let (Some(parent_pos), Some(parent_prim)) = (self.parent_position, self.parent_primary) {
+            if idx == parent_prim && can_chain_exception(parent_pos, child_pos) {
+                return true;
+            }
+        }
+
+        if let (Some(parent_pos), Some(parent_sec)) = (self.parent_position, self.parent_secondary) {
+            if idx == parent_sec && can_chain_exception(parent_pos, child_pos) {
+                return true;
+            }
+        }
+
+        false
     }
 
     pub fn secondary_allowed(&self, idx: usize) -> bool {
@@ -34,6 +101,9 @@ impl Constraints {
             forbidden_primary: self.forbidden_primary,
             forbidden_secondary: self.forbidden_secondary,
             allowed_primary_once: 0,
+            parent_position: self.parent_position,
+            parent_primary: self.parent_primary,
+            parent_secondary: self.parent_secondary,
         }
     }
 
@@ -42,6 +112,9 @@ impl Constraints {
             forbidden_primary: self.forbidden_primary & present_letters,
             forbidden_secondary: self.forbidden_secondary & present_letters,
             allowed_primary_once: self.allowed_primary_once & present_letters,
+            parent_position: self.parent_position,
+            parent_primary: self.parent_primary,
+            parent_secondary: self.parent_secondary,
         }
     }
 }
@@ -170,12 +243,17 @@ pub const SOFT_NO_PAIRS: &[SoftNoPair] = &[
     },
 ];
 
-pub fn split_allowed(constraints: &Constraints, primary_idx: usize, secondary_idx: usize) -> bool {
+pub fn split_allowed(
+    constraints: &Constraints,
+    primary_idx: usize,
+    secondary_idx: usize,
+    position: Position,
+) -> bool {
     // For hard splits (primary == secondary), the exception should apply to both checks
     if primary_idx == secondary_idx {
-        constraints.primary_allowed(primary_idx)
+        constraints.primary_allowed(primary_idx, position)
     } else {
-        constraints.primary_allowed(primary_idx) && constraints.secondary_allowed(secondary_idx)
+        constraints.primary_allowed(primary_idx, position) && constraints.secondary_allowed(secondary_idx)
     }
 }
 
@@ -198,6 +276,7 @@ pub fn branch_constraints(
     constraints: &Constraints,
     primary_idx: usize,
     secondary_idx: usize,
+    position: Position,
     yes_primary_allow: Option<u32>,
     no_primary_allow: Option<u32>,
 ) -> (Constraints, Constraints) {
@@ -207,14 +286,32 @@ pub fn branch_constraints(
     let primary_bit = 1u32 << primary_idx;
     let secondary_bit = 1u32 << secondary_idx;
 
-    // Apply the general rule
+    // Apply the general rule: touched letters are forbidden
+    // In yes branch: primary is touched
     yes.forbidden_primary |= primary_bit;
     yes.forbidden_secondary |= primary_bit;
 
+    // In no branch: both primary and secondary are touched
     no.forbidden_primary |= primary_bit | secondary_bit;
     no.forbidden_secondary |= primary_bit | secondary_bit;
 
-    // Exception allowances (single-use)
+    // Store parent info for chaining exceptions
+    // Yes branch: primary is touched (but can chain), secondary is untouched
+    yes.parent_position = Some(position);
+    yes.parent_primary = Some(primary_idx);
+    yes.parent_secondary = None;
+
+    // No branch: both are touched (secondary can chain in soft splits)
+    no.parent_position = Some(position);
+    no.parent_primary = None;  // primary cannot chain in no branch
+    if primary_idx != secondary_idx {
+        // Only in soft splits can the secondary chain in no branch
+        no.parent_secondary = Some(secondary_idx);
+    } else {
+        no.parent_secondary = None;
+    }
+
+    // Exception allowances (single-use, for immediate children only)
     if let Some(bit) = yes_primary_allow {
         yes.allowed_primary_once |= bit;
     }

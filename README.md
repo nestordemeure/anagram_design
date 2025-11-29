@@ -32,7 +32,7 @@ Nodes are yes/no questions that partition the word set:
 
 ### Splits (rewamped and systematized)
 
-Some letters have reciprocals, other letters with which they migh get confused: E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R (those relations go both ways: E is the reciprocal of I, and I is the reciprocal of E).
+Some letters have reciprocals, other letters with which they might get confused: E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R (those relations go both ways: E is the reciprocal of I, and I is the reciprocal of E).
 In this section we will call `A` a random letter, `A-` its reciprocal, and `B` any other random letter.
 
 Splits (with the exception of Leaves and Repeat) all have hard baseline, and soft variants (note the use of reciprocal to create soft variant, as well as the use of nearby position, and mirror positions):
@@ -71,26 +71,36 @@ Splits (with the exception of Leaves and Repeat) all have hard baseline, and sof
 
 ### Constraints
 
-Splits (with the exeption of Leaves and Repeat) come with a primary letter and a secondary letter.
+Splits (except Leaves and Repeat) have a primary letter and a secondary letter.
 
-Hard splits have only a primary letter, it is the letter being tested upon.
-We can consider that letter is both their primary and secondary letter, to simplify things.
+**Hard splits**: Primary letter P equals secondary letter (the letter being tested).
+**Soft splits**: Primary letter P (for yes branch) differs from secondary letter S (for no branch).
 
-Soft split have a primary letter, used for the `yes` branch, and a secondary letter, used as a backup for the `no` branch.
+#### Touched Letters
 
-Given a split of primary letter P and secondary letter S:
-* later splits in its `yes` branch *cannot* have P as their primary or secondary letter (they *can* use S in the `yes` branch),
-* later splits in its `no` branch *cannot* have P, *nor S*, as their primary or secondary letter.
+When a split uses primary P and secondary S:
+- P is **touched** in both branches (yes and no).
+- S is **touched** only in the no branch.
 
-That rule has exceptions for immediate children (grandchildren must follow standards rules):
-* for the children of a `Contains 'P'?` (optionally: `(all No contain 'Q')`)
-  * The `yes` branch's immediate child can use P as primary
-  * In case of soft contain, the `no` branch's immediate child can use S as primary
-* for the children of a positional split (first, second, third, third to last, second to last, last)
-  * The `yes` branch's immediate child can use P as primary if its a Double or Triple or another positional
-  * In case of soft positional split, the `no` branch's immediate child can use S as primary if its a Double or Triple or another positional
-* similarly, the children of a double triple can use the same letter if they are themselves a double or triple
-Note that the exeption can be moved more than once down the line: this means we could do a Sontain P, followed by a First P, followed by a Double P. (there are, in essense, 3 classes of splits from the root Contain, to next level positionals, to double/triple)
+Descendants cannot use touched letters as their primary or secondary, except where noted below.
+
+#### Basic Rule
+
+- **Yes branch**: P is touched; S is untouched (can be used as primary or secondary).
+- **No branch**: Both P and S are touched (neither can be used).
+
+#### Exceptions (Immediate Children Only)
+
+There are three split **classes**: Contains → Positional (first/second/third/last/etc.) → Double/Triple.
+
+Immediate children may use touched letters as primary when moving **same-class or downward**:
+- After a **Contains 'P'?**, the yes-branch child can use P as primary (for another Contains, any positional, or Double/Triple).
+- After a **soft Contains 'P'? (all No contain 'S')**, the no-branch child can use S as primary (same movement rules).
+- After a **Positional 'P'**, the yes-branch child can use P as primary if it's another positional (same or different position), Double, or Triple.
+- After a **soft Positional 'P'? (no-branch constraint uses 'S')**, the no-branch child can use S as primary if it's another positional, Double, or Triple.
+- After a **Double/Triple 'P'**, children can use P as primary if they are also Double or Triple.
+
+These exceptions **chain**: you can do Contains P → First P → Double P, as long as each step moves same-class or downward.
 
 ### Cost (lexicographically minimized)
 
@@ -111,10 +121,10 @@ cargo run --quiet
 The binary prints the optimal trees for the Zodiac word set twice, once allowing `Repeat` nodes and once disallowing them.
 
 Baseline:
-* Allow repeat: true | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 0.9, depth 6) | 5 tree
-* Allow repeat: true | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.3, avg no 1.3, depth 6) | 5 tree
-* Allow repeat: false | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 1.3, depth 6) | 5 tree
-* Allow repeat: false | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 1.3, depth 6) | 5 tree
+* Allow repeat: true | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.5, avg no 0.9, depth 6) | 5 tree(s)
+* Allow repeat: true | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.2, avg no 1.2, depth 6) | 5 tree(s)
+* Allow repeat: false | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.5, avg no 1.3, depth 6) | 5 tree(s)
+* Allow repeat: false | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.4, avg no 1.4, depth 5) | 5 tree(s)
 
 ## Testing
 
@@ -146,9 +156,9 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* apply rewamped / extended constraints exemption logic
+* prune useless tests out
 
 * further optimizations
 
-* further subtleties (mew soft constraints):
+* further subtleties (new soft constraints):
   * introduce sounds-based subtleties
