@@ -3,6 +3,9 @@ name = "anagram_design"
 version = "0.1.0"
 edition = "2021"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
