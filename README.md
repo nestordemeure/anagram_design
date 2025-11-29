@@ -82,11 +82,13 @@ Given a split of primary letter P and secondary letter S:
 * later splits in its `yes` branch *cannot* have P as their primary or secondary letter (they *can* use S in the `yes` branch),
 * later splits in its `no` branch *cannot* have P, *nor S*, as their primary or secondary letter.
 
-That rule has one exeption:
-* a hard contain, of primary letter P, *can* be directly followed by a split whose primary letter is P in its `yes` branch
-* a soft contain, of primary letter P and secondary letter S, *can* be directly followed by a split whose primary letter is P in its `yes` branch, and *can* be directly followed by a split whose primary letter is S in its `no` branch
-
-There is already some (imperfect and incomplete) logic around those rules in the code, but it needs to be unified to both simplify it and ensure correctness and exhaustivity across operations.
+That rule has exceptions for immediate children:
+* For **any** split (not just Contains), the **immediate** child splits get independent exceptions:
+  * The `yes` branch's immediate child can use P as primary once
+  * For soft splits, the `no` branch's immediate child can use S as primary once
+  * For hard splits, the `no` branch gets no exception
+* These exceptions only apply to the immediate child; grandchildren must follow the standard rules
+* Yes and No branches are treated independently - using an exception in one branch doesn't affect the other
 
 ### Cost (lexicographically minimized)
 

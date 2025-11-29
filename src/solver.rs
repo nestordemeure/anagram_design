@@ -170,7 +170,7 @@ fn try_split(
     exhausted_flag: &mut bool,
 ) {
     // Determine exception allowances
-    // Allow position splits to reuse their test letter in the yes branch
+    // Each branch gets independent exceptions for their primary letters
     let test_bit = 1u32 << test_idx;
     let req_bit = 1u32 << req_idx;
 

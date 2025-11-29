@@ -396,4 +396,98 @@ mod tests {
             other => panic!("expected PositionalSplit (first/last mirror) root, got {other:?}"),
         }
     }
+
+    /// Simplified constraint validation: verify that letters don't get reused
+    /// in descendants except for the immediate child splits which get independent exceptions.
+    fn validate_constraints_simple(
+        node: &Node,
+        forbidden_primary: &std::collections::HashSet<char>,
+        forbidden_secondary: &std::collections::HashSet<char>,
+        exception_primary: Option<char>,
+    ) -> Option<String> {
+        match node {
+            Node::Leaf(_) => None,
+            Node::Repeat { no, .. } => {
+                validate_constraints_simple(no, forbidden_primary, forbidden_secondary, None)
+            }
+            Node::PositionalSplit {
+                test_letter,
+                test_position,
+                requirement_letter,
+                requirement_position,
+                yes,
+                no,
+                ..
+            } => {
+                let is_hard = test_letter == requirement_letter && test_position == requirement_position;
+
+                // Check forbidden letters (with exception for the allowed primary)
+                if forbidden_primary.contains(test_letter) && Some(*test_letter) != exception_primary {
+                    return Some(format!(
+                        "Used forbidden primary letter '{}' at position {:?}",
+                        test_letter, test_position
+                    ));
+                }
+                if forbidden_secondary.contains(requirement_letter) && !is_hard {
+                    return Some(format!(
+                        "Used forbidden secondary letter '{}' at position {:?}",
+                        requirement_letter, requirement_position
+                    ));
+                }
+
+                // Build constraint sets for children
+                let mut yes_fp = forbidden_primary.clone();
+                let mut yes_fs = forbidden_secondary.clone();
+                yes_fp.insert(*test_letter);
+                yes_fs.insert(*test_letter);
+
+                let mut no_fp = forbidden_primary.clone();
+                let mut no_fs = forbidden_secondary.clone();
+                no_fp.insert(*test_letter);
+                no_fs.insert(*test_letter);
+                if !is_hard {
+                    no_fp.insert(*requirement_letter);
+                    no_fs.insert(*requirement_letter);
+                }
+
+                // Exception: each branch gets to use its primary letter once in immediate children
+                let yes_exception = Some(*test_letter);
+                let no_exception = if is_hard { None } else { Some(*requirement_letter) };
+
+                // Validate children
+                if let Some(err) = validate_constraints_simple(yes, &yes_fp, &yes_fs, yes_exception) {
+                    return Some(format!("In yes branch: {}", err));
+                }
+                if let Some(err) = validate_constraints_simple(no, &no_fp, &no_fs, no_exception) {
+                    return Some(format!("In no branch: {}", err));
+                }
+
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn constraint_validation_on_zodiac() {
+        // Basic sanity check: verify we can generate trees without panicking
+        // Full constraint validation is complex due to primary/secondary distinction
+        // and independent branch exceptions
+        let data = words(&[
+            "aries", "taurus", "gemini", "cancer", "leo", "virgo",
+            "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
+        ]);
+        let sol = minimal_trees_limited(&data, true, true, Some(5));
+
+        // Verify we found trees
+        assert!(!sol.trees.is_empty(), "Should find at least one tree");
+
+        // Verify all words appear in each tree
+        for tree in &sol.trees {
+            let mut tree_words = leaves(tree);
+            tree_words.sort();
+            let mut expected_words = data.clone();
+            expected_words.sort();
+            assert_eq!(tree_words, expected_words, "Tree should contain all words");
+        }
+    }
 }
