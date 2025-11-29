@@ -90,6 +90,38 @@ function describePos(fromEnd, idx) {
   return positions[fromEnd]?.[idx] ?? `pos ${idx}`;
 }
 
+// Format position name for display
+function formatPosition(position) {
+  const positions = {
+    "Contains": "Contains",
+    "First": "First letter",
+    "Second": "Second letter",
+    "Third": "Third letter",
+    "ThirdToLast": "Third-to-last letter",
+    "SecondToLast": "Second-to-last letter",
+    "Last": "Last letter",
+    "Double": "Double",
+    "Triple": "Triple"
+  };
+  return positions[position] || position;
+}
+
+// Format requirement description for soft splits
+function formatRequirement(position, letter) {
+  const requirements = {
+    "Contains": `all No contain '${displayLetter(letter)}'`,
+    "First": `all No have '${displayLetter(letter)}' first`,
+    "Second": `all No have '${displayLetter(letter)}' second`,
+    "Third": `all No have '${displayLetter(letter)}' third`,
+    "ThirdToLast": `all No have '${displayLetter(letter)}' third-to-last`,
+    "SecondToLast": `all No have '${displayLetter(letter)}' second-to-last`,
+    "Last": `all No have '${displayLetter(letter)}' last`,
+    "Double": `all No double '${displayLetter(letter)}'`,
+    "Triple": `all No triple '${displayLetter(letter)}'`
+  };
+  return requirements[position] || `requirement ${position}`;
+}
+
 // Format node info as a question string (similar to Rust's format.rs)
 function formatNodeInfo(info) {
   if (!info) {
@@ -102,22 +134,19 @@ function formatNodeInfo(info) {
       return capitalizeFirst(info.word);
     case "repeat":
       return `Repeat ${capitalizeFirst(info.word)}, ${capitalizeFirst(info.word)}, ${capitalizeFirst(info.word)}...`;
-    case "split":
-      return `Contains '${displayLetter(info.letter)}'?`;
-    case "softSplit":
-      return `Contains '${displayLetter(info.testLetter)}'? (all No contain '${displayLetter(info.requirementLetter)}')`;
-    case "firstLetterSplit":
-      return `First letter '${displayLetter(info.letter)}'?`;
-    case "softFirstLetterSplit":
-      return `First letter '${displayLetter(info.testLetter)}'? (all No have '${displayLetter(info.requirementLetter)}' second)`;
-    case "lastLetterSplit":
-      return `Last letter '${displayLetter(info.letter)}'?`;
-    case "softLastLetterSplit":
-      return `Last letter '${displayLetter(info.testLetter)}'? (all No have '${displayLetter(info.requirementLetter)}' second-to-last)`;
-    case "softMirrorPosSplit":
-      return `${describePos(info.testFromEnd, info.testIndex)} letter '${displayLetter(info.testLetter)}'? (all No have it ${describePos(info.requirementFromEnd, info.requirementIndex)})`;
-    case "softDoubleLetterSplit":
-      return `Double '${displayLetter(info.testLetter)}'? (all No double '${displayLetter(info.requirementLetter)}')`;
+    case "positionalSplit": {
+      const { testLetter, testPosition, requirementLetter, requirementPosition } = info;
+
+      // Hard split: test and requirement are the same
+      if (testLetter === requirementLetter && testPosition === requirementPosition) {
+        return `${formatPosition(testPosition)} '${displayLetter(testLetter)}'?`;
+      } else {
+        // Soft split: different test and requirement
+        const testDesc = `${formatPosition(testPosition)} '${displayLetter(testLetter)}'?`;
+        const reqDesc = formatRequirement(requirementPosition, requirementLetter);
+        return `${testDesc} (${reqDesc})`;
+      }
+    }
     default:
       console.error("Unknown node type:", info.type);
       return "[Unknown node type]";
