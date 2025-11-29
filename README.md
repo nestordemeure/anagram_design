@@ -82,13 +82,15 @@ Given a split of primary letter P and secondary letter S:
 * later splits in its `yes` branch *cannot* have P as their primary or secondary letter (they *can* use S in the `yes` branch),
 * later splits in its `no` branch *cannot* have P, *nor S*, as their primary or secondary letter.
 
-That rule has exceptions for immediate children:
-* For **any** split (not just Contains), the **immediate** child splits get independent exceptions:
-  * The `yes` branch's immediate child can use P as primary once
-  * For soft splits, the `no` branch's immediate child can use S as primary once
-  * For hard splits, the `no` branch gets no exception
-* These exceptions only apply to the immediate child; grandchildren must follow the standard rules
-* Yes and No branches are treated independently - using an exception in one branch doesn't affect the other
+That rule has exceptions for immediate children (grandchildren must follow standards rules):
+* for the children of a `Contains 'P'?` (optionally: `(all No contain 'Q')`)
+  * The `yes` branch's immediate child can use P as primary
+  * In case of soft contain, the `no` branch's immediate child can use S as primary
+* for the children of a positional split (first, second, third, third to last, second to last, last)
+  * The `yes` branch's immediate child can use P as primary if its a Double or Triple or another positional
+  * In case of soft positional split, the `no` branch's immediate child can use S as primary if its a Double or Triple or another positional
+* similarly, the children of a double triple can use the same letter if they are themselves a double or triple
+Note that the exeption can be moved more than once down the line: this means we could do a Sontain P, followed by a First P, followed by a Double P. (there are, in essense, 3 classes of splits from the root Contain, to next level positionals, to double/triple)
 
 ### Cost (lexicographically minimized)
 
@@ -144,7 +146,7 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* add another exption to the "do not use the letter" rule (around first actually second)
+* apply rewamped / extended constraints exemption logic
 
 * further optimizations
 
