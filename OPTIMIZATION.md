@@ -301,3 +301,64 @@ Such analysis would be more expensive than the solve() calls we're trying to avo
 
 ---
 
+## Attempt #8: Remove Alpha-Beta Pruning ❌
+
+**Branch**: `optim-no-pruning` (reverted)
+**Date**: 2025-11-28
+
+### Hypothesis
+Maybe our heuristics (soft-before-hard, NO-first) are so poor at finding good solutions early that the alpha-beta pruning overhead exceeds its benefits. If we're rarely pruning branches, we're paying the cost of:
+- Lower bound calculations on every split attempt
+- Cost comparisons against best_cost
+- Branch ordering logic
+
+Without finding good solutions early to enable effective pruning.
+
+### Implementation
+Removed all alpha-beta pruning logic from `try_split()`:
+- Removed lower bound calculations
+- Removed pruning checks against best_cost
+- Removed "NO first" branch ordering
+- Kept only correctness checks (unsolvable branches)
+
+Changed from:
+```rust
+// Solve NO first for better pruning
+let no_sol = solve(no, ...);
+if no_sol.is_unsolvable() { return; }
+// Check lower bound, potentially skip YES
+if can_prune { return; }
+let yes_sol = solve(yes, ...);
+```
+
+To:
+```rust
+// Solve both unconditionally
+let yes_sol = solve(yes, ...);
+let no_sol = solve(no, ...);
+if yes_sol.is_unsolvable() || no_sol.is_unsolvable() { return; }
+```
+
+### Results
+- **Runtime**: 56.8 seconds
+- **Change**: **1.21x SLOWDOWN** (worse than 46.8s with pruning)
+- **Status**: ❌ Reverted
+
+### Analysis
+**FAILED**: The alpha-beta pruning IS providing net benefit (~10 seconds speedup, 1.21x).
+
+**Why it failed**:
+- The heuristics (soft-before-hard, NO-first) are actually working well enough
+- Pruning saves more work than the overhead costs
+- The "NO first" strategy + lower bound checks successfully skip expensive YES branches
+- Removing pruning forced solving both branches unconditionally, wasting computation
+
+**Lesson learned**: Our current heuristics enable effective pruning. The combination of:
+1. Soft splits before hard (finds cheaper solutions earlier)
+2. NO branch first (gets actual cost for better pruning decisions)
+3. Lower bound pruning (skips provably unpromising branches)
+
+...works together to provide measurable benefit. The overhead is justified.
+
+---
+
