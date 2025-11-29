@@ -14,6 +14,7 @@ pub(crate) struct Key {
     mask: Mask,
     forbidden: u32,
     allowed_primary_once: u32,
+    allow_repeat: bool,
     parent_position: Option<Position>,
     parent_letter: Option<usize>,
 }
@@ -227,11 +228,12 @@ fn generate_position_splits(
     splits
 }
 
-const fn make_key(mask: Mask, constraints: &Constraints) -> Key {
+const fn make_key(mask: Mask, constraints: &Constraints, allow_repeat: bool) -> Key {
     Key {
         mask,
         forbidden: constraints.forbidden_primary | constraints.forbidden_secondary,
         allowed_primary_once: constraints.allowed_primary_once,
+        allow_repeat,
         parent_position: constraints.parent_position,
         parent_letter: constraints.parent_letter,
     }
@@ -248,7 +250,7 @@ pub(crate) fn solve(
     let present_letters = letters_present(mask, ctx);
     let constraints = constraints.prune(present_letters);
 
-    let key = make_key(mask, &constraints);
+    let key = make_key(mask, &constraints, allow_repeat);
     if let Some(hit) = memo.get(&key) {
         return hit.clone();
     }

@@ -338,4 +338,43 @@ mod tests {
         assert!(sol.cost.nos <= 2);
     }
 
+    #[test]
+    fn split_with_repeat_branches_after_fix() {
+        // After fixing the memoization bug (adding allow_repeat to Key),
+        // word sets that cleanly partition should use Split(yes: Repeat, no: Repeat)
+        // instead of Repeat at the root.
+
+        let data = words(&["bar", "car", "bee", "see"]);
+        let sol = minimal_trees(&data, true, false);
+
+        println!("\nSolution for {{bar, car, bee, see}}:");
+        println!("Cost: {:?}", sol.cost);
+        println!("Tree:\n{}", format_tree(&sol.trees[0]));
+
+        // After the fix, we expect:
+        // - Root should be a Split (not Repeat)
+        // - Both branches should be Repeat nodes
+        // - Cost should be {hard_nos: 0, nos: 1, ...} (better than the old {hard_nos: 1, nos: 1, ...})
+
+        match &*sol.trees[0] {
+            Node::PositionalSplit { yes, no, .. } => {
+                let yes_is_repeat = matches!(&**yes, Node::Repeat { .. });
+                let no_is_repeat = matches!(&**no, Node::Repeat { .. });
+
+                assert!(yes_is_repeat, "Yes branch should be Repeat after fix");
+                assert!(no_is_repeat, "No branch should be Repeat after fix");
+
+                println!("\n✓ SUCCESS: Found Split(yes: Repeat, no: Repeat) pattern!");
+            }
+            _ => {
+                panic!("Root should be Split after fix, but got: {:?}", sol.trees[0]);
+            }
+        }
+
+        // Verify the cost is better than before
+        assert_eq!(sol.cost.hard_nos, 0, "Should have 0 hard_nos (all soft splits)");
+        assert_eq!(sol.cost.nos, 1, "Should have 1 no edge");
+        assert_eq!(sol.cost.depth, 2, "Depth should be 2");
+    }
+
 }
