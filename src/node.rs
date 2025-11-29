@@ -66,6 +66,29 @@ pub struct Solution {
     pub exhausted: bool,
 }
 
+impl Solution {
+    /// Check if this solution is unsolvable (no valid trees)
+    pub fn is_unsolvable(&self) -> bool {
+        self.trees.is_empty()
+    }
+
+    /// Create an unsolvable solution with worst-possible cost
+    pub fn unsolvable(word_count: u32) -> Self {
+        Solution {
+            cost: Cost {
+                nos: u32::MAX,
+                hard_nos: u32::MAX,
+                sum_nos: u32::MAX,
+                sum_hard_nos: u32::MAX,
+                depth: u32::MAX,
+                word_count,
+            },
+            trees: Vec::new(),
+            exhausted: false,
+        }
+    }
+}
+
 /// Create a positional split node
 pub fn combine_positional_split(
     test_letter: char,

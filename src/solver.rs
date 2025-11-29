@@ -196,6 +196,11 @@ fn try_split(
     let yes_sol = solve(yes, ctx, allow_repeat, prioritize_soft_no, yes_constraints, limit, memo);
     let no_sol = solve(no, ctx, allow_repeat, prioritize_soft_no, no_constraints, limit, memo);
 
+    // Skip this split if either branch is unsolvable
+    if yes_sol.is_unsolvable() || no_sol.is_unsolvable() {
+        return;
+    }
+
     // Calculate costs based on whether this is a hard or soft split
     let yes_cost = yes_sol.cost;
     let no_cost = if is_hard {
@@ -472,6 +477,11 @@ pub(crate) fn solve(
                 memo,
             );
 
+            // Skip this repeat if the no branch is unsolvable
+            if no_sol.is_unsolvable() {
+                continue;
+            }
+
             let yes_cost = Cost {
                 nos: 0,
                 hard_nos: 0,
@@ -551,18 +561,16 @@ pub(crate) fn solve(
     }
 
     // Generate all systematized splits for each position type
-    // Currently using 4 positions that the old code supported
-    // TODO: Improve constraint system to support all 9 position types (Second, Third, ThirdToLast, SecondToLast, Triple)
+    // All 9 position types are now supported - unsolvable branches are handled gracefully
     try_position_splits(Position::Contains, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
     try_position_splits(Position::First, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::Second, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::Third, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::ThirdToLast, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::SecondToLast, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
     try_position_splits(Position::Last, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
     try_position_splits(Position::Double, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
-    // These additional positions cause constraint exhaustion and need better exception handling:
-    // try_position_splits(Position::Second, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
-    // try_position_splits(Position::Third, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
-    // try_position_splits(Position::ThirdToLast, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
-    // try_position_splits(Position::SecondToLast, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
-    // try_position_splits(Position::Triple, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
+    try_position_splits(Position::Triple, mask, ctx, allow_repeat, prioritize_soft_no, &constraints, limit, memo, &mut best_cost, &mut best_trees, &mut exhausted);
 
     let sol = if let Some(cost) = best_cost {
         Solution {
@@ -571,7 +579,9 @@ pub(crate) fn solve(
             exhausted,
         }
     } else {
-        panic!("At least one tree must be found");
+        // No solution found given the constraints
+        // Return an unsolvable solution (worse than any real solution)
+        Solution::unsolvable(mask_count(mask))
     };
     memo.insert(key, sol.clone());
     sol

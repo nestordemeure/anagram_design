@@ -107,10 +107,10 @@ cargo run --quiet
 The binary prints the optimal trees for the Zodiac word set twice, once allowing `Repeat` nodes and once disallowing them.
 
 Baseline:
-* Allow repeat: true | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 0.9, depth 6) | 5 tree(s)
-* Allow repeat: true | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.3, avg no 1.3, depth 6) | 5 tree(s)
-* Allow repeat: false | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 1.3, depth 6) | 5 tree(s)
-* Allow repeat: false | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 1.3, depth 6) | 5 tree(s)
+* Allow repeat: true | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 0.9, depth 6) | 5 tree
+* Allow repeat: true | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.3, avg no 1.3, depth 6) | 5 tree
+* Allow repeat: false | Prioritize soft no: false | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 1.3, depth 6) | 5 tree
+* Allow repeat: false | Prioritize soft no: true | Best cost = (max hard no 1, max no 2, avg hard no 0.6, avg no 1.3, depth 6) | 5 tree
 
 ## Testing
 
@@ -142,7 +142,11 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
+* remove limit on total number of words?
+
 * add another exption to the "do not use the letter" rule (around first actually second)
+
+* further optimizations
 
 * further subtleties (mew soft constraints):
   * introduce sounds-based subtleties
