@@ -156,8 +156,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* prune useless tests out
-
 * further optimizations
 
 * further subtleties (new soft constraints):
