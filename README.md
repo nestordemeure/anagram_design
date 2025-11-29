@@ -82,7 +82,9 @@ Immediate children may use touched letters as primary when moving **same-class o
 
 These exceptions **chain**: you can do Contains P → First P → Double P, as long as each step moves same-class or downward.
 
-**Same-index restriction**: When chaining positional splits with the same letter, the two positions must not refer to the same absolute index in any word. Example: in "Leo" (3 letters), "Second" (index 1) and "Second-to-last" (index 1) refer to the same position, so they cannot be chained.
+**Same-index restriction**: When generating soft positional splits, positions must not collide in words of the NO branch. Example: "Second E? (all No have E second-to-last)" is invalid if any word in the NO branch has both positions referring to the same index.
+
+**Requirement position constraint**: For soft splits using the same letter at different positions (e.g., "Second E? (all No have E second-to-last)"), both the test position AND requirement position are checked against parent constraints. If parent used E at Second, children cannot use "... (all No have E second)" as a requirement.
 
 ### Cost
 
@@ -136,21 +138,3 @@ python3 -m http.server 8000 --directory docs             # then open http://loca
 Use `wasm-bindgen-cli 0.2.95` to match the pinned crate version (or update both in lockstep).
 
 To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled `pkg/` assets are served alongside `index.html`.
-
-## TODO
-
-* further subtleties:
-  * introduce sounds-based soft splits?
-
-in this:
-```
-Contains 'R'? (all No contain 'E')
-│└─ No: Second letter 'E'? (all No have 'I' second)
-│   │└─ No: Pisces
-│   │
-│   Contains 'L'? (all No contain 'I') ▼
-│   │└─ No: Gemini
-│   │
-│   └─ Leo
-```
-why do i not get "Second letter 'E'? (all No have 'E' second-to-last)" as an option?

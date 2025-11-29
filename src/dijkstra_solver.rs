@@ -130,13 +130,14 @@ fn generate_position_splits(
         };
 
         for req_position in soft_requirement_positions {
-            // Skip if test position and requirement position can collide for any word in the current mask
-            // This prevents splits like "Second E? (No have E Second-to-last)" on 3-letter words
-            // Check if positions collide for any actual word length in the mask
-            let positions_collide_for_mask = {
+            // Skip if test position and requirement position can collide for any word in the NO branch
+            // This prevents splits like "Second E? (No have E Second-to-last)" when No-branch words
+            // have positions that refer to the same index
+            // We only check the No branch because that's where the requirement applies
+            let positions_collide_for_no_branch = {
                 let mut collides = false;
                 for (word_idx, word) in ctx.words.iter().enumerate() {
-                    if mask & (1 << word_idx) != 0 {
+                    if no & (1 << word_idx) != 0 {
                         let word_len = word.chars().count();
                         if let (Some(idx1), Some(idx2)) = (position.to_absolute_index(word_len), req_position.to_absolute_index(word_len)) {
                             if idx1 == idx2 {
@@ -149,8 +150,18 @@ fn generate_position_splits(
                 collides
             };
 
-            if positions_collide_for_mask {
+            if positions_collide_for_no_branch {
                 continue;
+            }
+
+            // For soft splits with same letter at different positions, check that the
+            // requirement position isn't forbidden due to parent usage
+            // Example: if parent used "Second E?", child can't use "... (all No have E second)"
+            if let (Some(parent_pos), Some(parent_letter)) = (constraints.parent_position, constraints.parent_letter) {
+                if parent_letter == idx && parent_pos == req_position {
+                    // Requirement position matches parent's test position with same letter - forbidden!
+                    continue;
+                }
             }
 
             if split_allowed(constraints, idx, idx, position) {
