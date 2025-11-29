@@ -15,8 +15,7 @@ pub(crate) struct Key {
     forbidden: u32,
     allowed_primary_once: u32,
     parent_position: Option<Position>,
-    parent_primary: Option<usize>,
-    parent_secondary: Option<usize>,
+    parent_letter: Option<usize>,
 }
 
 
@@ -223,8 +222,7 @@ const fn make_key(mask: Mask, constraints: &Constraints) -> Key {
         forbidden: constraints.forbidden_primary | constraints.forbidden_secondary,
         allowed_primary_once: constraints.allowed_primary_once,
         parent_position: constraints.parent_position,
-        parent_primary: constraints.parent_primary,
-        parent_secondary: constraints.parent_secondary,
+        parent_letter: constraints.parent_letter,
     }
 }
 

@@ -58,10 +58,8 @@ pub struct Constraints {
     pub allowed_primary_once: u32,
     /// The position of the parent split (for determining if exceptions can chain)
     pub parent_position: Option<Position>,
-    /// The primary letter of the parent split (for chaining exceptions)
-    pub parent_primary: Option<usize>,
-    /// The secondary letter of the parent split (for chaining exceptions in no branch)
-    pub parent_secondary: Option<usize>,
+    /// The letter from the parent split that can chain in this branch
+    pub parent_letter: Option<usize>,
 }
 
 impl Constraints {
@@ -71,8 +69,7 @@ impl Constraints {
             forbidden_secondary: 0,
             allowed_primary_once: 0,
             parent_position: None,
-            parent_primary: None,
-            parent_secondary: None,
+            parent_letter: None,
         }
     }
 
@@ -98,18 +95,8 @@ impl Constraints {
         }
 
         // Check for chaining exceptions (for continuing chains)
-        if let (Some(parent_pos), Some(parent_prim)) = (self.parent_position, self.parent_primary) {
-            if idx == parent_prim && can_chain_exception(parent_pos, child_pos) {
-                // Disallow if positions would refer to the same absolute index
-                if positions_can_collide(parent_pos, child_pos) {
-                    return false;
-                }
-                return true;
-            }
-        }
-
-        if let (Some(parent_pos), Some(parent_sec)) = (self.parent_position, self.parent_secondary) {
-            if idx == parent_sec && can_chain_exception(parent_pos, child_pos) {
+        if let (Some(parent_pos), Some(parent_letter)) = (self.parent_position, self.parent_letter) {
+            if idx == parent_letter && can_chain_exception(parent_pos, child_pos) {
                 // Disallow if positions would refer to the same absolute index
                 if positions_can_collide(parent_pos, child_pos) {
                     return false;
@@ -133,8 +120,7 @@ impl Constraints {
             forbidden_secondary: self.forbidden_secondary,
             allowed_primary_once: 0,
             parent_position: self.parent_position,
-            parent_primary: self.parent_primary,
-            parent_secondary: self.parent_secondary,
+            parent_letter: self.parent_letter,
         }
     }
 
@@ -144,8 +130,7 @@ impl Constraints {
             forbidden_secondary: self.forbidden_secondary & present_letters,
             allowed_primary_once: self.allowed_primary_once & present_letters,
             parent_position: self.parent_position,
-            parent_primary: self.parent_primary,
-            parent_secondary: self.parent_secondary,
+            parent_letter: self.parent_letter,
         }
     }
 }
@@ -329,18 +314,16 @@ pub const fn branch_constraints(
     // Store parent info for chaining exceptions
     // Yes branch: primary is touched (but can chain), secondary is untouched
     yes.parent_position = Some(position);
-    yes.parent_primary = Some(primary_idx);
-    yes.parent_secondary = None;
+    yes.parent_letter = Some(primary_idx);
 
     // No branch: both are touched (secondary can chain in soft splits)
     no.parent_position = Some(position);
-    no.parent_primary = None;  // primary cannot chain in no branch
-    if primary_idx != secondary_idx {
+    no.parent_letter = if primary_idx != secondary_idx {
         // Only in soft splits can the secondary chain in no branch
-        no.parent_secondary = Some(secondary_idx);
+        Some(secondary_idx)
     } else {
-        no.parent_secondary = None;
-    }
+        None
+    };
 
     // Exception allowances (single-use, for immediate children only)
     if let Some(bit) = yes_primary_allow {
