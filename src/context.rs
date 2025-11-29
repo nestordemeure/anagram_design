@@ -19,8 +19,8 @@ impl<'a> Context<'a> {
     pub fn new(words: &'a [String]) -> Self {
         let letter_masks = make_letter_masks(words);
         let mut global_letters = Vec::with_capacity(26);
-        for idx in 0..26 {
-            if letter_masks[idx] != 0 {
+        for (idx, &mask) in letter_masks.iter().enumerate() {
+            if mask != 0 {
                 global_letters.push(idx);
             }
         }
@@ -40,11 +40,11 @@ impl<'a> Context<'a> {
     }
 }
 
-pub fn mask_count(mask: Mask) -> u32 {
+pub const fn mask_count(mask: Mask) -> u32 {
     mask.count_ones()
 }
 
-pub fn position_mask(ctx: &Context<'_>, from_end: bool, pos_index: u8, letter_idx: usize) -> Mask {
+pub const fn position_mask(ctx: &Context<'_>, from_end: bool, pos_index: u8, letter_idx: usize) -> Mask {
     match (from_end, pos_index) {
         (false, 1) => ctx.first_letter_masks[letter_idx],
         (false, 2) => ctx.second_letter_masks[letter_idx],
@@ -93,7 +93,7 @@ impl<'a> Iterator for Partitions<'a> {
     }
 }
 
-pub fn partitions<'a>(mask: Mask, masks: &'a [Mask; 26], global_letters: &'a [usize]) -> Partitions<'a> {
+pub const fn partitions<'a>(mask: Mask, masks: &'a [Mask; 26], global_letters: &'a [usize]) -> Partitions<'a> {
     Partitions {
         masks,
         mask,

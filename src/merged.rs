@@ -69,7 +69,7 @@ impl MergedNode {
         let mut groups: HashMap<NodeInfo, Vec<NodeRef>> = HashMap::new();
         for tree in trees {
             let info = NodeInfo::from_node(tree);
-            groups.entry(info).or_insert_with(Vec::new).push(tree.clone());
+            groups.entry(info).or_default().push(tree.clone());
         }
 
         // For each group, merge the children
@@ -124,7 +124,7 @@ impl MergedNode {
     }
 
     /// Check if this is a choice node (multiple options)
-    pub fn is_choice(&self) -> bool {
+    pub const fn is_choice(&self) -> bool {
         self.options.len() > 1
     }
 

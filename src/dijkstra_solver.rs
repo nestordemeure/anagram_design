@@ -26,7 +26,7 @@ fn push_limited(target: &mut SmallVec<[NodeRef; 5]>, limit: Option<usize>, node:
     }
 }
 
-fn get_position_masks<'a>(ctx: &'a Context<'a>, position: Position) -> &'a [Mask; 26] {
+const fn get_position_masks<'a>(ctx: &'a Context<'a>, position: Position) -> &'a [Mask; 26] {
     match position {
         Position::Contains => &ctx.letter_masks,
         Position::First => &ctx.first_letter_masks,
@@ -158,26 +158,25 @@ fn generate_position_splits(
         // 3. Special handling for Double and Triple
         if matches!(position, Position::Double | Position::Triple) {
             let req_masks = get_position_masks(ctx, position);
+            #[allow(clippy::needless_range_loop)]
             for req_idx in 0..26 {
                 if req_idx == idx {
                     continue;
                 }
-                if no & req_masks[req_idx] == no {
-                    if split_allowed(constraints, idx, req_idx, position) {
-                        let req_letter = (b'a' + req_idx as u8) as char;
-                        splits.push(SplitSpec {
-                            test_idx: idx,
-                            req_idx,
-                            test_letter,
-                            test_position: position,
-                            req_letter,
-                            req_position: position,
-                            is_hard: false,
-                            yes,
-                            no,
-                        });
-                        break;
-                    }
+                if no & req_masks[req_idx] == no && split_allowed(constraints, idx, req_idx, position) {
+                    let req_letter = (b'a' + req_idx as u8) as char;
+                    splits.push(SplitSpec {
+                        test_idx: idx,
+                        req_idx,
+                        test_letter,
+                        test_position: position,
+                        req_letter,
+                        req_position: position,
+                        is_hard: false,
+                        yes,
+                        no,
+                    });
+                    break;
                 }
             }
         }
@@ -201,7 +200,7 @@ fn generate_position_splits(
     splits
 }
 
-fn make_key(mask: Mask, constraints: &Constraints) -> Key {
+const fn make_key(mask: Mask, constraints: &Constraints) -> Key {
     Key {
         mask,
         forbidden: constraints.forbidden_primary | constraints.forbidden_secondary,
@@ -399,10 +398,10 @@ pub(crate) fn solve(
     }
 
     // Process split candidates in order of estimated cost
-    for (_est_cost, spec) in candidates {
+    for (est_cost, spec) in candidates {
         // Pruning: if we already have a solution and this candidate's estimate is worse, skip
         if let Some(ref current_best) = best_cost {
-            if compare_costs(&_est_cost, current_best, prioritize_soft_no) == Ordering::Greater {
+            if compare_costs(&est_cost, current_best, prioritize_soft_no) == Ordering::Greater {
                 continue;
             }
         }
@@ -410,9 +409,7 @@ pub(crate) fn solve(
         let test_bit = 1u32 << spec.test_idx;
         let req_bit = 1u32 << spec.req_idx;
 
-        let (yes_allow, no_allow) = if spec.is_hard {
-            (Some(test_bit), None)
-        } else if spec.test_idx == spec.req_idx {
+        let (yes_allow, no_allow) = if spec.is_hard || spec.test_idx == spec.req_idx {
             (Some(test_bit), None)
         } else {
             (Some(test_bit), Some(req_bit))

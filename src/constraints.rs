@@ -9,7 +9,7 @@ pub enum SplitClass {
 }
 
 /// Get the class of a position
-pub fn position_class(pos: Position) -> SplitClass {
+pub const fn position_class(pos: Position) -> SplitClass {
     match pos {
         Position::Contains => SplitClass::Contains,
         Position::First | Position::Second | Position::Third |
@@ -42,7 +42,7 @@ pub struct Constraints {
 }
 
 impl Constraints {
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Constraints {
             forbidden_primary: 0,
             forbidden_secondary: 0,
@@ -90,13 +90,13 @@ impl Constraints {
         false
     }
 
-    pub fn secondary_allowed(&self, idx: usize) -> bool {
+    pub const fn secondary_allowed(&self, idx: usize) -> bool {
         let bit = 1u32 << idx;
         self.forbidden_secondary & bit == 0
     }
 
     /// Clear one-time allowances when descending; persistent forbiddances stay.
-    pub fn next_level(&self) -> Self {
+    pub const fn next_level(&self) -> Self {
         Constraints {
             forbidden_primary: self.forbidden_primary,
             forbidden_secondary: self.forbidden_secondary,
@@ -107,7 +107,7 @@ impl Constraints {
         }
     }
 
-    pub fn prune(self, present_letters: u32) -> Self {
+    pub const fn prune(self, present_letters: u32) -> Self {
         Constraints {
             forbidden_primary: self.forbidden_primary & present_letters,
             forbidden_secondary: self.forbidden_secondary & present_letters,
@@ -272,7 +272,7 @@ pub fn get_reciprocal(letter_idx: usize) -> Option<usize> {
     None
 }
 
-pub fn branch_constraints(
+pub const fn branch_constraints(
     constraints: &Constraints,
     primary_idx: usize,
     secondary_idx: usize,

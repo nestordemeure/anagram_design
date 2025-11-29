@@ -156,7 +156,5 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* any part of the codebase still refernecing older DP-memoized code rathert han dijkstra based solvr?
-
 * further subtleties (new soft constraints):
   * introduce sounds-based subtleties

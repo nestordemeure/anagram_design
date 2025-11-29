@@ -11,7 +11,7 @@ pub fn format_tree(node: &Node) -> String {
     }
 
     // Display helper: show question letters in uppercase for clarity in ASCII trees
-    fn display_letter(c: char) -> char {
+    const fn display_letter(c: char) -> char {
         c.to_ascii_uppercase()
     }
 

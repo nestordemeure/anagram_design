@@ -17,7 +17,7 @@ pub enum Position {
 }
 
 impl Position {
-    pub fn name(&self) -> &'static str {
+    pub const fn name(&self) -> &'static str {
         match self {
             Position::Contains => "contains",
             Position::First => "first",
@@ -68,12 +68,12 @@ pub struct Solution {
 
 impl Solution {
     /// Check if this solution is unsolvable (no valid trees)
-    pub fn is_unsolvable(&self) -> bool {
+    pub const fn is_unsolvable(&self) -> bool {
         self.trees.is_empty()
     }
 
     /// Create an unsolvable solution with worst-possible cost
-    pub fn unsolvable(word_count: u32) -> Self {
+    pub const fn unsolvable(word_count: u32) -> Self {
         Solution {
             cost: Cost {
                 nos: u32::MAX,
