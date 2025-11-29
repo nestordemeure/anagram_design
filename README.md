@@ -158,3 +158,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 * further subtleties (new soft constraints):
   * introduce sounds-based subtleties
+
+* the exeption letting you follow a positional with another one does not apply if those are the same letter
+ * second letter AND second to last letter both referencing the same E
