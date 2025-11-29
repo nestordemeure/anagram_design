@@ -75,8 +75,8 @@ pub fn solve_words(
     if words_vec.is_empty() {
         return Err(JsValue::from_str("Please supply at least one word."));
     }
-    if words_vec.len() > 16 {
-        return Err(JsValue::from_str("Solver supports up to 16 words."));
+    if words_vec.len() > 32 {
+        return Err(JsValue::from_str("Solver supports up to 32 words."));
     }
 
     let limit = if limit == 0 {

@@ -8,8 +8,8 @@ The codebase is organized into focused modules:
 - **cost.rs** — Cost struct and comparison logic
 - **node.rs** — Node enum variants and combinators
 - **constraints.rs** — Letter constraint rules and soft-no pairs
-- **context.rs** — Word masks and partition iterators
-- **solver.rs** — Core recursive solver algorithm
+- **context.rs** — Word masks and partition iterators (supports up to 32 words via u32 bitmasks)
+- **dijkstra_solver.rs** — Cost-guided recursive solver with memoization
 - **format.rs** — ASCII tree rendering
 - **api.rs** — Public API (`minimal_trees`, `minimal_trees_limited`)
 - **wasm.rs** — WebAssembly bindings (conditional)
@@ -156,11 +156,7 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* further optimizations
-  * use perf / flamegraph to explore costs
-  * try a dijkstra type of algorithm instead as this problem might be a fit
-    * are some elements of the codebase remnents of the previous approach that would be best modified for the new one?
-    * update readme / comments
+* any part of the codebase still refernecing older DP-memoized code rathert han dijkstra based solvr?
 
 * further subtleties (new soft constraints):
   * introduce sounds-based subtleties
