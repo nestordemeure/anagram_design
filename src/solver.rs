@@ -365,7 +365,7 @@ fn try_position_splits(
 
     // Generate all partitions for this position
     // STRATEGY: Try soft splits before hard splits (soft is cheaper, finds better solutions earlier)
-    for (idx, yes, no) in partitions(mask, position_masks) {
+    for (idx, yes, no) in partitions(mask, position_masks, &ctx.global_letters) {
         let test_letter = (b'a' + idx as u8) as char;
 
         // 1. Soft split with reciprocal at same position (SOFT - try first)

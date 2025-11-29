@@ -9,13 +9,21 @@ pub struct Context<'a> {
     pub third_to_last_letter_masks: [u16; 26],
     pub double_letter_masks: [u16; 26],
     pub triple_letter_masks: [u16; 26],
+    pub global_letters: Vec<usize>, // Precomputed letters present in word set
 }
 
 impl<'a> Context<'a> {
     pub fn new(words: &'a [String]) -> Self {
+        let letter_masks = make_letter_masks(words);
+        let mut global_letters = Vec::with_capacity(26);
+        for idx in 0..26 {
+            if letter_masks[idx] != 0 {
+                global_letters.push(idx);
+            }
+        }
         Context {
             words,
-            letter_masks: make_letter_masks(words),
+            letter_masks,
             first_letter_masks: make_first_letter_masks(words),
             second_letter_masks: make_second_letter_masks(words),
             third_letter_masks: make_third_letter_masks(words),
@@ -24,6 +32,7 @@ impl<'a> Context<'a> {
             third_to_last_letter_masks: make_third_to_last_letter_masks(words),
             double_letter_masks: make_double_letter_masks(words),
             triple_letter_masks: make_triple_letter_masks(words),
+            global_letters,
         }
     }
 }
@@ -58,6 +67,7 @@ pub fn single_word_from_mask(mask: u16, words: &[String]) -> Option<String> {
 pub struct Partitions<'a> {
     masks: &'a [u16; 26],
     mask: u16,
+    global_letters: &'a [usize],
     idx: usize,
 }
 
@@ -65,25 +75,26 @@ impl<'a> Iterator for Partitions<'a> {
     type Item = (usize, u16, u16);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.idx < 26 {
-            let current_idx = self.idx;
+        while self.idx < self.global_letters.len() {
+            let letter_idx = self.global_letters[self.idx];
             self.idx += 1;
-            let letter_mask = self.masks[current_idx];
+            let letter_mask = self.masks[letter_idx];
             let yes = self.mask & letter_mask;
             if yes == 0 || yes == self.mask {
                 continue;
             }
             let no = self.mask & !letter_mask;
-            return Some((current_idx, yes, no));
+            return Some((letter_idx, yes, no));
         }
         None
     }
 }
 
-pub fn partitions(mask: u16, masks: &[u16; 26]) -> Partitions<'_> {
+pub fn partitions<'a>(mask: u16, masks: &'a [u16; 26], global_letters: &'a [usize]) -> Partitions<'a> {
     Partitions {
         masks,
         mask,
+        global_letters,
         idx: 0,
     }
 }
