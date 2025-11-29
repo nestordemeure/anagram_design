@@ -144,8 +144,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* remove limit on total number of words?
-
 * add another exption to the "do not use the letter" rule (around first actually second)
 
 * further optimizations
