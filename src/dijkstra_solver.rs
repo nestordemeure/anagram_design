@@ -333,12 +333,17 @@ pub(crate) fn solve(
             .filter(|(idx, _)| mask & ((1 as Mask) << idx) != 0)
         {
             let no_mask = mask & !((1 as Mask) << idx);
+            // Repeat nodes don't test letters, so they break constraint chains.
+            // Clear parent_position and parent_letter to prevent chaining through Repeat.
+            let mut repeat_constraints = constraints.next_level();
+            repeat_constraints.parent_position = None;
+            repeat_constraints.parent_letter = None;
             let no_sol = solve(
                 no_mask,
                 ctx,
                 false,
                 prioritize_soft_no,
-                constraints,
+                repeat_constraints,
                 memo,
             );
 
