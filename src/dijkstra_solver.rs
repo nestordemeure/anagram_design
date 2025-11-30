@@ -49,20 +49,17 @@ fn estimate_cost(mask: Mask, _constraints: &Constraints, _ctx: &Context<'_>, all
             hard_nos: 0,
             sum_nos: 0,
             sum_hard_nos: 0,
-            depth: 0,
             word_count: 1,
         };
     }
 
     // Lower bounds:
-    // - depth: ceil(log2(N)) minimum levels needed
     // - nos: 1 if N >= threshold, else 0
     //   - When allow_repeat=true: threshold is 3 (2 words can be handled with Repeat, nos=0)
     //   - When allow_repeat=false: threshold is 2 (need at least one split)
     // - hard_nos: 0 (optimistic: assume all soft splits)
     // - sum_nos: N-1 (balanced tree has N-1 internal nodes, each adds ≥1)
     // - sum_hard_nos: 0 (optimistic: assume all soft)
-    let depth_estimate = (count as f32).log2().ceil() as u32;
     let threshold = if allow_repeat { 3 } else { 2 };
 
     Cost {
@@ -70,7 +67,6 @@ fn estimate_cost(mask: Mask, _constraints: &Constraints, _ctx: &Context<'_>, all
         hard_nos: 0,                                   // Optimistic: all soft
         sum_nos: count.saturating_sub(1),              // N-1 (balanced tree internal nodes)
         sum_hard_nos: 0,                               // Optimistic: all soft
-        depth: depth_estimate,
         word_count: count,
     }
 }
@@ -270,7 +266,6 @@ pub(crate) fn solve(
                 hard_nos: 0,
                 sum_nos: 0,
                 sum_hard_nos: 0,
-                depth: 0,
                 word_count: 1,
             },
             trees: vec![Rc::new(Node::Leaf(word))],
@@ -314,7 +309,6 @@ pub(crate) fn solve(
                 } else {
                     est_yes.sum_hard_nos + est_no.sum_hard_nos
                 },
-                depth: est_yes.depth.max(est_no.depth) + 1,
                 word_count: est_yes.word_count + est_no.word_count,
             };
 
@@ -360,7 +354,6 @@ pub(crate) fn solve(
                 hard_nos: 0,
                 sum_nos: 0,
                 sum_hard_nos: 0,
-                depth: 0,
                 word_count: 1,
             };
 
@@ -369,7 +362,6 @@ pub(crate) fn solve(
                 hard_nos: no_sol.cost.hard_nos.max(yes_cost.hard_nos),
                 sum_nos: yes_cost.sum_nos + no_sol.cost.sum_nos,
                 sum_hard_nos: yes_cost.sum_hard_nos + no_sol.cost.sum_hard_nos,
-                depth: yes_cost.depth.max(no_sol.cost.depth) + 1,
                 word_count: yes_cost.word_count + no_sol.cost.word_count,
             };
 
@@ -478,7 +470,6 @@ pub(crate) fn solve(
                 hard_nos: no_sol.cost.hard_nos + 1,
                 sum_nos: no_sol.cost.sum_nos,
                 sum_hard_nos: no_sol.cost.sum_hard_nos,
-                depth: no_sol.cost.depth,
                 word_count: no_sol.cost.word_count,
             }
         } else {
@@ -487,14 +478,12 @@ pub(crate) fn solve(
                 hard_nos: no_sol.cost.hard_nos,
                 sum_nos: no_sol.cost.sum_nos,
                 sum_hard_nos: no_sol.cost.sum_hard_nos,
-                depth: no_sol.cost.depth,
                 word_count: no_sol.cost.word_count,
             }
         };
 
         let nos = yes_cost.nos.max(no_cost.nos);
         let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let branch_depth = yes_sol.cost.depth.max(no_sol.cost.depth) + 1;
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = if spec.is_hard {
             yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count
@@ -507,7 +496,6 @@ pub(crate) fn solve(
             hard_nos,
             sum_nos: total_sum_nos,
             sum_hard_nos: total_sum_hard_nos,
-            depth: branch_depth,
             word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
         };
 

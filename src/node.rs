@@ -93,7 +93,6 @@ impl Solution {
                 hard_nos: u32::MAX,
                 sum_nos: u32::MAX,
                 sum_hard_nos: u32::MAX,
-                depth: u32::MAX,
                 word_count,
             },
             trees: Vec::new(),

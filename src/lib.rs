@@ -59,7 +59,6 @@ mod tests {
             nos: 2,
             sum_hard_nos: 0,
             sum_nos: 4,
-            depth: 2,
             word_count: 4,
         };
         let hard_first = Cost {
@@ -67,7 +66,6 @@ mod tests {
             nos: 1,
             sum_hard_nos: 1,
             sum_nos: 2,
-            depth: 3,
             word_count: 4,
         };
 
@@ -83,10 +81,14 @@ mod tests {
 
     #[test]
     fn repeat_beats_depth_for_two_words() {
+        use std::cmp::Ordering;
         let data = words(&["alpha", "beta"]);
         let with_repeat = minimal_trees(&data, true, true);
         let without_repeat = minimal_trees(&data, false, true);
-        assert!(with_repeat.cost < without_repeat.cost);
+        assert_eq!(
+            compare_costs(&with_repeat.cost, &without_repeat.cost, true),
+            Ordering::Less
+        );
         assert!(matches!(&*with_repeat.trees[0], Node::Repeat { .. }));
     }
 
@@ -102,7 +104,6 @@ mod tests {
                 hard_nos: 1,
                 sum_nos: 2,
                 sum_hard_nos: 1,
-                depth: 2,
                 word_count: 3
             }
         );
@@ -135,12 +136,11 @@ mod tests {
                 hard_nos: 1,
                 sum_nos: 15,
                 sum_hard_nos: 3,
-                depth: 6,
                 word_count: 12
             }
         );
         // With the corrected collision detection (checking only NO branch),
-        // we get better trees with improved depth and sum_hard_nos
+        // we get better trees with improved sum_hard_nos
         assert_eq!(
             no_repeat.cost,
             Cost {
@@ -148,7 +148,6 @@ mod tests {
                 hard_nos: 1,
                 sum_nos: 17,
                 sum_hard_nos: 5,
-                depth: 5,
                 word_count: 12
             }
         );
@@ -183,7 +182,6 @@ mod tests {
                 nos: 1,
                 sum_hard_nos: 0,
                 sum_nos: 2,
-                depth: 2,
                 word_count: 3
             },
             "Expected all-soft separation; got {:?}",
@@ -205,7 +203,6 @@ mod tests {
                 hard_nos: 1,
                 sum_nos: 3,
                 sum_hard_nos: 2,
-                depth: 3,
                 word_count: 4
             }
         );
@@ -228,7 +225,6 @@ mod tests {
                 hard_nos: 0,
                 sum_nos: 1,
                 sum_hard_nos: 0,
-                depth: 1,
                 word_count: 2
             }
         );
@@ -334,7 +330,6 @@ mod tests {
         assert!(!sol.is_unsolvable());
         assert!(!sol.trees.is_empty());
         // Cost should be quite low for just 3 words
-        assert!(sol.cost.depth <= 3);
         assert!(sol.cost.nos <= 2);
     }
 
@@ -374,7 +369,6 @@ mod tests {
         // Verify the cost is better than before
         assert_eq!(sol.cost.hard_nos, 0, "Should have 0 hard_nos (all soft splits)");
         assert_eq!(sol.cost.nos, 1, "Should have 1 no edge");
-        assert_eq!(sol.cost.depth, 2, "Depth should be 2");
     }
 
 }

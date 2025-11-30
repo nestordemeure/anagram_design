@@ -29,14 +29,13 @@ fn print_solutions(allow_repeat: bool, prioritize_soft_no: bool) {
     let avg_sum_hard = result.cost.sum_hard_nos as f32 / word_count as f32;
     let avg_sum = result.cost.sum_nos as f32 / word_count as f32;
     println!(
-        "Allow repeat: {} | Prioritize soft no: {} | Best cost = (max hard no {}, max no {}, avg hard no {:.1}, avg no {:.1}, depth {}) | {} tree(s)",
+        "Allow repeat: {} | Prioritize soft no: {} | Best cost = (max hard no {}, max no {}, avg hard no {:.1}, avg no {:.1}) | {} tree(s)",
         allow_repeat,
         prioritize_soft_no,
         result.cost.hard_nos,
         result.cost.nos,
         avg_sum_hard,
         avg_sum,
-        result.cost.depth,
         result.trees.len()
     );
     for (idx, tree) in result.trees.iter().take(preview).enumerate() {
