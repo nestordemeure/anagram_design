@@ -20,7 +20,7 @@ Nodes are yes/no questions that partition the word set. Each split has a **hard*
 
 ### Splits
 
-**Reciprocal pairs**: E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R (bidirectional).
+**Reciprocal pairs**: E/I, C/K, S/Z, I/L, M/N, U/V, O/Q, C/G, B/P, I/T, R/E, A/R, I/J, V/W, Q/G, E/B, E/F, R/P, R/B, T/F, Y/X, Y/V, O/G, P/F, A/H, D/B, J/L (bidirectional).
 
 In the list below, `A` represents any letter, `A-` its reciprocal, and `B` any other letter.
 Soft variants use reciprocals, nearby positions, or mirror positions:

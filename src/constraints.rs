@@ -257,6 +257,141 @@ pub const SOFT_NO_PAIRS: &[SoftNoPair] = &[
         test_letter: 'r',
         requirement_letter: 'a',
     },
+    // I/J pair
+    SoftNoPair {
+        test_letter: 'i',
+        requirement_letter: 'j',
+    },
+    SoftNoPair {
+        test_letter: 'j',
+        requirement_letter: 'i',
+    },
+    // V/W pair
+    SoftNoPair {
+        test_letter: 'v',
+        requirement_letter: 'w',
+    },
+    SoftNoPair {
+        test_letter: 'w',
+        requirement_letter: 'v',
+    },
+    // Q/G pair
+    SoftNoPair {
+        test_letter: 'q',
+        requirement_letter: 'g',
+    },
+    SoftNoPair {
+        test_letter: 'g',
+        requirement_letter: 'q',
+    },
+    // E/B pair
+    SoftNoPair {
+        test_letter: 'e',
+        requirement_letter: 'b',
+    },
+    SoftNoPair {
+        test_letter: 'b',
+        requirement_letter: 'e',
+    },
+    // E/F pair
+    SoftNoPair {
+        test_letter: 'e',
+        requirement_letter: 'f',
+    },
+    SoftNoPair {
+        test_letter: 'f',
+        requirement_letter: 'e',
+    },
+    // R/P pair
+    SoftNoPair {
+        test_letter: 'r',
+        requirement_letter: 'p',
+    },
+    SoftNoPair {
+        test_letter: 'p',
+        requirement_letter: 'r',
+    },
+    // R/B pair
+    SoftNoPair {
+        test_letter: 'r',
+        requirement_letter: 'b',
+    },
+    SoftNoPair {
+        test_letter: 'b',
+        requirement_letter: 'r',
+    },
+    // T/F pair
+    SoftNoPair {
+        test_letter: 't',
+        requirement_letter: 'f',
+    },
+    SoftNoPair {
+        test_letter: 'f',
+        requirement_letter: 't',
+    },
+    // Y/X pair
+    SoftNoPair {
+        test_letter: 'y',
+        requirement_letter: 'x',
+    },
+    SoftNoPair {
+        test_letter: 'x',
+        requirement_letter: 'y',
+    },
+    // Y/V pair
+    SoftNoPair {
+        test_letter: 'y',
+        requirement_letter: 'v',
+    },
+    SoftNoPair {
+        test_letter: 'v',
+        requirement_letter: 'y',
+    },
+    // O/G pair
+    SoftNoPair {
+        test_letter: 'o',
+        requirement_letter: 'g',
+    },
+    SoftNoPair {
+        test_letter: 'g',
+        requirement_letter: 'o',
+    },
+    // P/F pair
+    SoftNoPair {
+        test_letter: 'p',
+        requirement_letter: 'f',
+    },
+    SoftNoPair {
+        test_letter: 'f',
+        requirement_letter: 'p',
+    },
+    // A/H pair
+    SoftNoPair {
+        test_letter: 'a',
+        requirement_letter: 'h',
+    },
+    SoftNoPair {
+        test_letter: 'h',
+        requirement_letter: 'a',
+    },
+    // D/B pair
+    SoftNoPair {
+        test_letter: 'd',
+        requirement_letter: 'b',
+    },
+    SoftNoPair {
+        test_letter: 'b',
+        requirement_letter: 'd',
+    },
+    // J/L pair
+    SoftNoPair {
+        test_letter: 'j',
+        requirement_letter: 'l',
+    },
+    SoftNoPair {
+        test_letter: 'l',
+        requirement_letter: 'j',
+    },
 ];
 
 pub fn split_allowed(
