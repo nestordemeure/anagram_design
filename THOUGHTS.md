@@ -1,94 +1,48 @@
-# Thougts
+# Redeeming Hits
 
-## Grasping at thoughts
-
-* the problem is 2 nos in a row
-  we want yeses we can put in between those, even if they are not discriminant
-  we could introduce a useless yes node type? and tweak the cost to prioritze it?
-
-* some split have no impact, everything goes in their true branch
-  * a function to add all of those that can be added legally might be fun for scripting purposes
-  * also, they do soften the previous no / soft no (into no-, softno-)
-    hard no < hard no- < sof no < soft no-
-    a cost could be (hard no, hard no-, soft no, soft no-, avg etc)
-
-maybe a concept we need is `hit`
-or maybe `chain of hits`?
-the problem with 2 nos in a row is that it puts our shortest chain of hits to 0 (arguable a soft no gets it to 0.5, and two soft nos in a row to.. 1? or 0.5?)
-
-## Hits
-
-We care about:
-* hard no
-* soft no
-* hits
-
-What does the worst path look like?
-what does the average path look like?
-how can i compare paths in a way that is satisfying?
-
-how many nos are on it?
-how many hits?
-how many soft hits?
-
-right now we compute:
-worst path:
-1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches)
-2. `nos` — max No edges on any path
-average path:
-3. `sum_hard_nos` — weighted sum of hard No edges
-4. `sum_nos` — weighted sum of No edges (words in the No branch each add 1)
-further tree complexity metric:
-5. `depth` — max tree depth
-(inversing hard no and no depending on whether we want to get more soft nos, or less overall nos)
-
-let me look at the paths in a tree:
-soft soft pisces
-soft hit soft gemini
-soft hit hit leo
-hit hard soft scorpio
-hit hard hit virgo
-hit hit hard soft cancer
-hit hit hard hit soft libra
-hit hit hard hit hit capricorn
-hit hit hit soft aries
-hit hit hit hit soft sagitarus
-hit hit hit hit hit soft aquarius
-hit hit hit hit hit hit taurus
-
-lets trim starting and ending hits, plus cutting single questions hits:
-soft soft
-soft hit soft
-hard soft
-hard
-hard soft
-hard hit soft
-hard
-soft
-soft
-soft
-here the worst is clearly `hard soft`, its the maximum number of nos in a row and has zero redeeming hit
-if we look at a single element, `hard` is clearly worse than `soft`
-and `hard hit soft` is clearly better than `hard soft`
-what about `soft hard` vs `hard soft`? no strong position on that.
-what about `hard soft` vs `hard hit hit soft hit hit soft`? no wthat is interesting ... i might prefer the later...
-
-it sounds like the concept of `redeeming hits` might be meaningful
-`n` (default to 2) hits after a no redeem it, erasing it from the slate
-that, however, should still be worst than no no (which eans that, while we decrease the main no counter, we have one after the no and soft no that is no decreased, same for averages)
-but better than just a no, or even a soft
-
-## Theory
+## Rough Theory
 
 Whenever we get a `yes`, that's a `hit`.
 
 Let's introduce the concept of `redeeming hits` (in the UI, where they are set at a default of 2, and in the code).
 If you get `n` redeeming hits (ou defualt of 2) right after a no, then that no is not counted.
-Obviously no nos would be even better, so we need to introduce a third counter (after hard no, and no) to track true nos (same with averages). 
+Obviously no nos would be even better, so we need to introduce a third counter to the cost (after hard no, and no) to track true nos (same with averages). 
 
 Let's introduce `HitSplits`.
 They are copies of the hard splits, and come with the same constraints down the line, but all words go into their yes branch (ie a "contain A" split used when all words contain A).
 Thus, adding one does not introduce any no, and gets you a hit.
 
 Our current search algorithm might not be amenable to that possibility of decreasing costs.
-We have to change it from a dikjstra like to something else...
+We have to change it from a dikjstra like to something else maybe?
+
+the value returned by a subtree could have a number of hits, capped at `n`
+if the current node is a no, it turns those to 0
+but, if those are `n`, then the current no does not count in the normal counts
+that way we can still build a cost based on children's costs
+
+## Local Reedeming Logic
+
+Tree can return a number of hits, capped at `n`
+the cost at the parent can be computed taking those into account, they become 0 on the max path (no)
+a parent getting those from a no branch would set those to 0, 
+now the true no (sum true no) in the cost would be different from no and sum no
+
+## Implementation Plan
+
+This is delicate to implement, thus we should do it in steps making sure things are valid before moving to the next thing.
+
+* We can introduce `HitSplits` (or make them a valid option for hard splits)
+  the solver will not see much point to them (as no redeeming hits logic is implemented, they are just no cost options) but that's fine
+  we need to update the formater (both Rust and Javascript) to display nodes with no `no` branch
+
+* We can introduce a `redeeming hits` parameter (`n`, defaults to 2, 0 means the redeeming hits logic is not enabled) to the UI
+  it would be passed to the solver but, for now, do nothing.
+
+* We can update the cost representation to introduce true nos, and sum true nos
+  for now they will be identical to no and sum no
+  the UI would still display true values below the tree, not redeeming (thus reduced) ones, even if that means recomputing them on a tree after the solve
+
+Then we need to add the redeeming logic.
+
+By this point our solver might return suboptimal results when `n>0`, due to the heuristic and logic of the solver being unfit for the task, but that's fine for now.
+At this point we can start thinking about heuristic and solver logic.
