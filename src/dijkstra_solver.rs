@@ -9,6 +9,10 @@ use crate::constraints::{Constraints, get_reciprocal, split_allowed, branch_cons
 use crate::context::{Context, Mask, mask_count, single_word_from_mask, partitions,
                      letters_present};
 
+/// Memoization key for solve().
+///
+/// Note: prioritize_soft_no is NOT included because it's constant throughout a single
+/// solve() call tree (memo is created fresh in minimal_trees and passed down).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Key {
     mask: Mask,
