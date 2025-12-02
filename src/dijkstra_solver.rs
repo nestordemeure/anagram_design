@@ -481,22 +481,34 @@ pub(crate) fn solve(
 
         // Pruning: check if no branch cost already exceeds best
         if let Some(ref current_best) = best_cost {
-            let no_cost_nos = no_sol.cost.nos + 1;
-            let no_cost_hard_nos = if spec.is_hard {
-                no_sol.cost.hard_nos + 1
+            let no_cost = if spec.is_hard {
+                Cost {
+                    hard_nos: no_sol.cost.hard_nos + 1,
+                    redeemed_hard_nos: no_sol.cost.redeemed_hard_nos + redeeming_yes as i32,
+                    nos: no_sol.cost.nos + 1,
+                    redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
+                    sum_hard_nos: no_sol.cost.sum_hard_nos,
+                    redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
+                    sum_nos: no_sol.cost.sum_nos,
+                    redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
+                    word_count: no_sol.cost.word_count,
+                }
             } else {
-                no_sol.cost.hard_nos
+                Cost {
+                    hard_nos: no_sol.cost.hard_nos,
+                    redeemed_hard_nos: no_sol.cost.redeemed_hard_nos,
+                    nos: no_sol.cost.nos + 1,
+                    redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
+                    sum_hard_nos: no_sol.cost.sum_hard_nos,
+                    redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
+                    sum_nos: no_sol.cost.sum_nos,
+                    redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
+                    word_count: no_sol.cost.word_count,
+                }
             };
 
-            let can_prune = if prioritize_soft_no {
-                no_cost_hard_nos > current_best.hard_nos
-                    || (no_cost_hard_nos == current_best.hard_nos && no_cost_nos > current_best.nos)
-            } else {
-                no_cost_nos > current_best.nos
-                    || (no_cost_nos == current_best.nos && no_cost_hard_nos > current_best.hard_nos)
-            };
-
-            if can_prune {
+            // Use compare_costs to check if this no branch is already worse than best
+            if compare_costs(&no_cost, current_best, prioritize_soft_no) == Ordering::Greater {
                 continue;
             }
         }
