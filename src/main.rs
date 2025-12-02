@@ -39,11 +39,13 @@ fn print_solutions(allow_repeat: bool, prioritize_soft_no: bool) {
         result.trees.len()
     );
     for (idx, tree) in result.trees.iter().take(preview).enumerate() {
-        println!("--- Tree {} ---\n{}", idx + 1, format_tree(tree));
+        let tree_output = format_tree(tree);
+        let tree_num = idx + 1;
+        println!("--- Tree {tree_num} ---\n{tree_output}");
     }
     if result.trees.len() > preview {
         let more = result.trees.len() - preview;
-        println!("... {} more optimal tree(s) omitted from display", more);
+        println!("... {more} more optimal tree(s) omitted from display");
     }
 }
 

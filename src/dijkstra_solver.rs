@@ -111,17 +111,22 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
     // Track used (position, letter_idx) pairs to avoid redundant YesSplits
     type UsedPairs = SmallVec<[(Position, usize); 8]>;
 
+    // Depth tracking for chain building
+    struct ChainDepth {
+        remaining: u32,
+        current: u32,
+    }
+
     // Helper: recursively build chains
     fn build_chains(current_node: NodeRef,
                     mask: Mask,
                     ctx: &Context<'_>,
                     constraints: Constraints,
                     used_pairs: &UsedPairs,
-                    remaining_depth: u32,
-                    current_depth: u32,
+                    depth: ChainDepth,
                     results: &mut Vec<(NodeRef, u32)>)
     {
-        if remaining_depth == 0
+        if depth.remaining == 0
         {
             return;
         }
@@ -145,7 +150,7 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
                                                    &current_node);
 
             // Record this augmented version
-            results.push((yes_split_node.clone(), current_depth + 1));
+            results.push((yes_split_node.clone(), depth.current + 1));
 
             // Update constraints for next level (like hard splits do)
             let test_bit = 1u32 << idx;
@@ -168,8 +173,7 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
                          ctx,
                          next_constraints,
                          &next_used_pairs,
-                         remaining_depth - 1,
-                         current_depth + 1,
+                         ChainDepth { remaining: depth.remaining - 1, current: depth.current + 1 },
                          results);
         }
     }
@@ -186,8 +190,7 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
                  ctx,
                  *constraints,
                  &used_pairs,
-                 max_chain_length,
-                 0,
+                 ChainDepth { remaining: max_chain_length, current: 0 },
                  &mut results);
 
     results

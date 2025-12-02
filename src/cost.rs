@@ -6,19 +6,19 @@ pub struct Cost
 {
     /// Number of hard No-edges on the heaviest path (primary objective).
     pub hard_nos: u32,
-    /// Redeemed hard No-edges (scaled by redeeming_yes parameter).
+    /// Redeemed hard No-edges (scaled by `redeeming_yes` parameter).
     pub redeemed_hard_nos: i32,
     /// Number of No-edges on the heaviest path (secondary objective).
     pub nos: u32,
-    /// Redeemed No-edges (scaled by redeeming_yes parameter).
+    /// Redeemed No-edges (scaled by `redeeming_yes` parameter).
     pub redeemed_nos: i32,
     /// Sum of hard No-edges weighted by word count (tertiary objective).
     pub sum_hard_nos: u32,
-    /// Redeemed sum of hard No-edges (scaled by redeeming_yes parameter).
+    /// Redeemed sum of hard No-edges (scaled by `redeeming_yes` parameter).
     pub redeemed_sum_hard_nos: i32,
     /// Sum of No-edges weighted by word count (quaternary objective).
     pub sum_nos: u32,
-    /// Redeemed sum of No-edges (scaled by redeeming_yes parameter).
+    /// Redeemed sum of No-edges (scaled by `redeeming_yes` parameter).
     pub redeemed_sum_nos: i32,
     /// Number of words in this subtree.
     pub word_count: u32
@@ -54,8 +54,8 @@ pub fn add_no_edge(base: &Cost, is_hard: bool, redeeming_yes: i32) -> Cost
     }
 }
 
-/// Apply the cost impact of a YesSplit.
-/// YesSplits contribute -1 to all redeemed_* metrics (not scaled by redeeming_yes).
+/// Apply the cost impact of a `YesSplit`.
+/// `YesSplit`s contribute -1 to all `redeemed_*` metrics (not scaled by `redeeming_yes`).
 pub fn add_yes_split(base: &Cost) -> Cost
 {
     Cost { hard_nos: base.hard_nos,

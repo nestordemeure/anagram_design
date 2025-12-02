@@ -5,14 +5,15 @@ Minimal-cost “anagram” trees for a set of words, implemented in Rust.
 ## Code Structure
 
 The codebase is organized into focused modules:
-- **cost.rs** — Cost struct and comparison logic
-- **node.rs** — Node enum variants and combinators
+- **cost.rs** — Cost struct with redemption metrics and comparison logic
+- **node.rs** — Node enum variants (Leaf, Repeat, PositionalSplit, YesSplit)
 - **constraints.rs** — Letter constraint rules and soft-no pairs
 - **context.rs** — Word masks and partition iterators
 - **dijkstra_solver.rs** — Cost-guided recursive solver with memoization
 - **format.rs** — ASCII tree rendering
-- **api.rs** — Public API
-- **wasm.rs** — WebAssembly
+- **merged.rs** — Node merging and tree comparison for finding equivalent trees
+- **api.rs** — Public API (`minimal_trees` function)
+- **wasm.rs** — WebAssembly bindings
 
 ## Theory
 
@@ -58,10 +59,12 @@ Soft variants use reciprocals, nearby positions, or mirror positions:
 * `Triple 'A'?`
   * `(all No have triple 'B')`
 
-### Leaves and Repeat
+### Node Types
 
-- **Leaf**: Names a specific word. Yes branch resolves it; No branch continues with remaining words.
-- **Repeat**: Like Leaf, but re-enables the same word in descendants (disabled by default after first use).
+- **Leaf**: Names a specific word (terminal node)
+- **Repeat**: Like Leaf, but re-enables the same word in descendants (disabled by default after first use)
+- **PositionalSplit**: Standard yes/no split with primary and secondary letters
+- **YesSplit**: Yes-only split when condition applies to all words (contributes negative redemption)
 
 ### Constraints
 
@@ -88,20 +91,22 @@ These exceptions **chain**: you can do Contains P → First P → Double P, as l
 
 ### Cost
 
-**WARNING:** Those cost informatoins are out of date. Trust the code first and foremost.
+Cost structure tracks both primary metrics and redemption:
 
-Each node type contributes to cost metrics:
-- **Hard splits** (primary = secondary): No edge adds 1 to both `nos` and `hard_nos`
-- **Soft splits** (primary ≠ secondary): No edge adds 1 to `nos` only
-- **Leaves/Repeat**: Add 1 to `depth` only
+- **hard_nos** / **redeemed_hard_nos** — max hard No edges on any path (and redemption)
+- **nos** / **redeemed_nos** — max No edges on any path (and redemption)
+- **sum_hard_nos** / **redeemed_sum_hard_nos** — sum weighted by word count (and redemption)
+- **sum_nos** / **redeemed_sum_nos** — sum weighted by word count (and redemption)
+- **word_count** — number of words in subtree
 
-Trees are optimized by lexicographically minimizing:
+Edge contributions:
+- **Hard split No edge**: +1 to both `hard_nos` and `nos`, +`redeeming_yes` to redemption metrics
+- **Soft split No edge**: +1 to `nos` only, +`redeeming_yes` to redemption
+- **YesSplit**: -1 to all redemption metrics (not scaled by `redeeming_yes`)
 
-1. `hard_nos` — max hard No edges on any root→leaf path (component-wise max across branches)
-2. `nos` — max No edges on any path
-3. `sum_hard_nos` — weighted sum of hard No edges
-4. `sum_nos` — weighted sum of No edges (words in the No branch each add 1)
-5. `depth` — max tree depth
+Comparison modes (controlled by `prioritize_soft_no`):
+- **true**: Prioritizes minimizing hard No edges first
+- **false**: Prioritizes minimizing all No edges first
 
 ## Usage
 
@@ -111,7 +116,9 @@ Trees are optimized by lexicographically minimizing:
 cargo run --quiet
 ```
 
-Prints four trees for the Zodiac word set, with various options allowed or disabled.
+Prints optimal trees for the Zodiac word set with four configurations:
+- allow_repeat × {true, false}
+- prioritize_soft_no × {true, false}
 
 ### Testing
 
@@ -119,7 +126,12 @@ Prints four trees for the Zodiac word set, with various options allowed or disab
 cargo test
 ```
 
-Includes regression tests and a Zodiac cost check for several settings.
+Includes regression tests for:
+- Cost comparison logic
+- Zodiac word set with baseline (`redeeming_yes=0`) and default (`redeeming_yes=2`) settings
+- Soft split separation capabilities
+- Position collision detection
+- Repeat node behavior
 
 ### Web Demo (WASM)
 

@@ -28,43 +28,43 @@ pub fn format_tree(node: &Node) -> String {
         // Hard split: test and requirement are the same
         if test_letter == requirement_letter && test_position == requirement_position {
             match test_position {
-                Position::Contains => format!("Contains '{}'?", test_letter_upper),
-                Position::First => format!("First letter '{}'?", test_letter_upper),
-                Position::Second => format!("Second letter '{}'?", test_letter_upper),
-                Position::Third => format!("Third letter '{}'?", test_letter_upper),
-                Position::ThirdToLast => format!("Third-to-last letter '{}'?", test_letter_upper),
-                Position::SecondToLast => format!("Second-to-last letter '{}'?", test_letter_upper),
-                Position::Last => format!("Last letter '{}'?", test_letter_upper),
-                Position::Double => format!("Double '{}'?", test_letter_upper),
-                Position::Triple => format!("Triple '{}'?", test_letter_upper),
+                Position::Contains => format!("Contains '{test_letter_upper}'?"),
+                Position::First => format!("First letter '{test_letter_upper}'?"),
+                Position::Second => format!("Second letter '{test_letter_upper}'?"),
+                Position::Third => format!("Third letter '{test_letter_upper}'?"),
+                Position::ThirdToLast => format!("Third-to-last letter '{test_letter_upper}'?"),
+                Position::SecondToLast => format!("Second-to-last letter '{test_letter_upper}'?"),
+                Position::Last => format!("Last letter '{test_letter_upper}'?"),
+                Position::Double => format!("Double '{test_letter_upper}'?"),
+                Position::Triple => format!("Triple '{test_letter_upper}'?"),
             }
         } else {
             // Soft split: different test and requirement
             let test_desc = match test_position {
-                Position::Contains => format!("Contains '{}'?", test_letter_upper),
-                Position::First => format!("First letter '{}'?", test_letter_upper),
-                Position::Second => format!("Second letter '{}'?", test_letter_upper),
-                Position::Third => format!("Third letter '{}'?", test_letter_upper),
-                Position::ThirdToLast => format!("Third-to-last letter '{}'?", test_letter_upper),
-                Position::SecondToLast => format!("Second-to-last letter '{}'?", test_letter_upper),
-                Position::Last => format!("Last letter '{}'?", test_letter_upper),
-                Position::Double => format!("Double '{}'?", test_letter_upper),
-                Position::Triple => format!("Triple '{}'?", test_letter_upper),
+                Position::Contains => format!("Contains '{test_letter_upper}'?"),
+                Position::First => format!("First letter '{test_letter_upper}'?"),
+                Position::Second => format!("Second letter '{test_letter_upper}'?"),
+                Position::Third => format!("Third letter '{test_letter_upper}'?"),
+                Position::ThirdToLast => format!("Third-to-last letter '{test_letter_upper}'?"),
+                Position::SecondToLast => format!("Second-to-last letter '{test_letter_upper}'?"),
+                Position::Last => format!("Last letter '{test_letter_upper}'?"),
+                Position::Double => format!("Double '{test_letter_upper}'?"),
+                Position::Triple => format!("Triple '{test_letter_upper}'?"),
             };
 
             let req_desc = match requirement_position {
-                Position::Contains => format!("all No contain '{}'", req_letter_upper),
-                Position::First => format!("all No have '{}' first", req_letter_upper),
-                Position::Second => format!("all No have '{}' second", req_letter_upper),
-                Position::Third => format!("all No have '{}' third", req_letter_upper),
-                Position::ThirdToLast => format!("all No have '{}' third-to-last", req_letter_upper),
-                Position::SecondToLast => format!("all No have '{}' second-to-last", req_letter_upper),
-                Position::Last => format!("all No have '{}' last", req_letter_upper),
-                Position::Double => format!("all No double '{}'", req_letter_upper),
-                Position::Triple => format!("all No triple '{}'", req_letter_upper),
+                Position::Contains => format!("all No contain '{req_letter_upper}'"),
+                Position::First => format!("all No have '{req_letter_upper}' first"),
+                Position::Second => format!("all No have '{req_letter_upper}' second"),
+                Position::Third => format!("all No have '{req_letter_upper}' third"),
+                Position::ThirdToLast => format!("all No have '{req_letter_upper}' third-to-last"),
+                Position::SecondToLast => format!("all No have '{req_letter_upper}' second-to-last"),
+                Position::Last => format!("all No have '{req_letter_upper}' last"),
+                Position::Double => format!("all No double '{req_letter_upper}'"),
+                Position::Triple => format!("all No triple '{req_letter_upper}'"),
             };
 
-            format!("{} ({})", test_desc, req_desc)
+            format!("{test_desc} ({req_desc})")
         }
     }
 
@@ -87,8 +87,8 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(&capitalize_first(word));
                 out.push_str("...\n");
 
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
+                let child_prefix = format!("{prefix}   ");
+                render_no_branch(no, &format!("{child_prefix}│"), out);
 
                 render_yes_final(&Node::Leaf(word.clone()), &child_prefix, out);
             }
@@ -110,8 +110,8 @@ pub fn format_tree(node: &Node) -> String {
                 ));
                 out.push('\n');
 
-                let child_prefix = format!("{}   ", prefix);
-                render_no_branch(no, &format!("{}│", child_prefix), out);
+                let child_prefix = format!("{prefix}   ");
+                render_no_branch(no, &format!("{child_prefix}│"), out);
                 render_yes_final(yes, &child_prefix, out);
             }
             Node::YesSplit {
@@ -132,7 +132,7 @@ pub fn format_tree(node: &Node) -> String {
                 ));
                 out.push_str(" (yes only)\n");
 
-                let child_prefix = format!("{}   ", prefix);
+                let child_prefix = format!("{prefix}   ");
                 // No "no" branch to render for YesSplit
                 render_yes_final(yes, &child_prefix, out);
             }
@@ -161,7 +161,7 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(&capitalize_first(word));
                 out.push_str("...\n");
 
-                render_no_branch(no, &format!("{}│", prefix), out);
+                render_no_branch(no, &format!("{prefix}│"), out);
 
                 out.push_str(prefix);
                 out.push_str("│\n");
@@ -189,7 +189,7 @@ pub fn format_tree(node: &Node) -> String {
                 ));
                 out.push('\n');
 
-                render_no_branch(no, &format!("{}│", prefix), out);
+                render_no_branch(no, &format!("{prefix}│"), out);
 
                 // No spacer line needed - next node will add its own if needed
 
@@ -243,7 +243,7 @@ pub fn format_tree(node: &Node) -> String {
                 out.push_str(&capitalize_first(word));
                 out.push_str("...\n");
 
-                render_no_branch(no, &format!("{}│", prefix), out);
+                render_no_branch(no, &format!("{prefix}│"), out);
 
                 out.push_str(prefix);
                 out.push_str("│\n");
@@ -269,7 +269,7 @@ pub fn format_tree(node: &Node) -> String {
                 out.push('\n');
 
                 // No branch diverges sideways
-                render_no_branch(no, &format!("{}│", prefix), out);
+                render_no_branch(no, &format!("{prefix}│"), out);
 
                 // Spacer line for clarity between decision points
                 out.push_str(prefix);
