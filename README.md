@@ -134,7 +134,8 @@ cargo build --lib --target wasm32-unknown-unknown --release
 wasm-bindgen --target web --out-dir docs/pkg --no-typescript target/wasm32-unknown-unknown/release/anagram_design.wasm
 
 # Test the webpage
-python3 -m http.server 8000 --directory docs             # then open http://localhost:8000
+python3 -m http.server 8000 --directory docs
+# then open http://localhost:8000
 ```
 
 Use `wasm-bindgen-cli 0.2.95` to match the pinned crate version (or update both in lockstep).
@@ -143,5 +144,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* redeeming yes
-  * gave solver an exhaustive redeeming split adder
+* should normal yes impact redeemed costs?
+* should YesSplits be allowed in yes branches?
+* the heuristic is a bit pessimistic (ne redemption expected) but an accurate one fails

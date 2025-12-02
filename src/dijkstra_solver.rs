@@ -3,8 +3,8 @@ use std::rc::Rc;
 use hashbrown::HashMap;
 use smallvec::SmallVec;
 
-use crate::cost::{add_no_edge, compare_costs, estimate_cost, Cost};
-use crate::node::{Node, NodeRef, Solution, Position, combine_positional_split};
+use crate::cost::{add_no_edge, add_yes_split, compare_costs, estimate_cost, Cost};
+use crate::node::{Node, NodeRef, Solution, Position, combine_positional_split, combine_yes_split};
 use crate::constraints::{Constraints, get_reciprocal, split_allowed, branch_constraints};
 use crate::context::{Context, Mask, mask_count, single_word_from_mask, partitions,
                      letters_present};
@@ -49,6 +49,125 @@ struct SplitSpec {
     is_hard: bool,
     yes: Mask,
     no: Mask,
+}
+
+/// Find all valid YesSplits for a mask.
+/// YesSplits are hard splits that are true for ALL words in the mask.
+fn find_valid_yes_splits(
+    mask: Mask,
+    ctx: &Context<'_>,
+    constraints: &Constraints,
+) -> Vec<(Position, usize, char)> {
+    let mut valid_yes_splits = Vec::new();
+
+    // Try all position types
+    for position in &[
+        Position::Contains,
+        Position::First,
+        Position::Second,
+        Position::Third,
+        Position::ThirdToLast,
+        Position::SecondToLast,
+        Position::Last,
+        Position::Double,
+        Position::Triple,
+    ] {
+        let position_masks = get_position_masks(ctx, *position);
+
+        // Check each letter
+        for (idx, &letter_mask) in position_masks.iter().enumerate().take(26) {
+
+            // YesSplit is valid if ALL words in mask have this property
+            // (i.e., yes == mask, no == 0)
+            if mask & letter_mask == mask {
+                // Check if this split is allowed by constraints (like hard splits)
+                if split_allowed(constraints, idx, idx, *position) {
+                    let letter = (b'a' + idx as u8) as char;
+                    valid_yes_splits.push((*position, idx, letter));
+                }
+            }
+        }
+    }
+
+    valid_yes_splits
+}
+
+/// Generate all YesSplit chains wrapping a base node.
+/// Returns tuples of (augmented_node, cost_delta) where cost_delta is the number of YesSplits added.
+fn generate_yes_split_chains(
+    base_node: &NodeRef,
+    mask: Mask,
+    ctx: &Context<'_>,
+    constraints: &Constraints,
+    max_chain_length: u32,
+) -> Vec<(NodeRef, u32)> {
+    let mut results = Vec::new();
+
+    // Helper: recursively build chains
+    fn build_chains(
+        current_node: NodeRef,
+        mask: Mask,
+        ctx: &Context<'_>,
+        constraints: Constraints,
+        remaining_depth: u32,
+        current_depth: u32,
+        results: &mut Vec<(NodeRef, u32)>,
+    ) {
+        if remaining_depth == 0 {
+            return;
+        }
+
+        // Find valid YesSplits at this level
+        let valid_splits = find_valid_yes_splits(mask, ctx, &constraints);
+
+        for (position, idx, letter) in valid_splits {
+            // Create YesSplit node wrapping current_node
+            let yes_split_node = combine_yes_split(
+                letter,
+                position,
+                letter, // requirement_letter same as test_letter for hard splits
+                position, // requirement_position same as test_position
+                &current_node,
+            );
+
+            // Record this augmented version
+            results.push((yes_split_node.clone(), current_depth + 1));
+
+            // Update constraints for next level (like hard splits do)
+            let test_bit = 1u32 << idx;
+            let (next_constraints, _) = branch_constraints(
+                &constraints,
+                idx,
+                idx, // same as test_idx for hard splits
+                position,
+                Some(test_bit), // yes branch allows this letter once
+                None, // no branch doesn't exist for YesSplit
+            );
+
+            // Recursively try adding more YesSplits
+            build_chains(
+                yes_split_node,
+                mask,
+                ctx,
+                next_constraints,
+                remaining_depth - 1,
+                current_depth + 1,
+                results,
+            );
+        }
+    }
+
+    build_chains(
+        Rc::clone(base_node),
+        mask,
+        ctx,
+        *constraints,
+        max_chain_length,
+        0,
+        &mut results,
+    );
+
+    results
 }
 
 /// Generate all valid splits for a given position
@@ -452,77 +571,105 @@ pub(crate) fn solve(
             continue;
         }
 
-        // Calculate combined cost
-        let yes_cost = yes_sol.cost;
-        let no_cost = add_no_edge(&no_sol.cost, spec.is_hard, redeeming_yes as i32);
+        // Helper to process a split (base or augmented with YesSplits)
+        let mut process_split = |no_branch_node: &NodeRef, yes_split_count: u32| {
+            // Calculate cost with YesSplit adjustments
+            let mut no_cost = add_no_edge(&no_sol.cost, spec.is_hard, redeeming_yes as i32);
 
-        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
-        let redeemed_hard_nos = yes_cost.redeemed_hard_nos.max(no_cost.redeemed_hard_nos);
-        let nos = yes_cost.nos.max(no_cost.nos);
-        let redeemed_nos = yes_cost.redeemed_nos.max(no_cost.redeemed_nos);
-        let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
-        let total_sum_hard_nos = if spec.is_hard {
-            yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count
-        } else {
-            yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos
-        };
-        let total_redeemed_sum_nos = yes_sol.cost.redeemed_sum_nos + no_sol.cost.redeemed_sum_nos + (no_sol.cost.word_count as i32 * redeeming_yes as i32);
-        let total_redeemed_sum_hard_nos = if spec.is_hard {
-            yes_sol.cost.redeemed_sum_hard_nos + no_sol.cost.redeemed_sum_hard_nos + (no_sol.cost.word_count as i32 * redeeming_yes as i32)
-        } else {
-            yes_sol.cost.redeemed_sum_hard_nos + no_sol.cost.redeemed_sum_hard_nos
-        };
+            // Apply YesSplit cost adjustments (-1 per YesSplit)
+            for _ in 0..yes_split_count {
+                no_cost = add_yes_split(&no_cost);
+            }
 
-        let branch_cost = Cost {
-            hard_nos,
-            redeemed_hard_nos,
-            nos,
-            redeemed_nos,
-            sum_hard_nos: total_sum_hard_nos,
-            redeemed_sum_hard_nos: total_redeemed_sum_hard_nos,
-            sum_nos: total_sum_nos,
-            redeemed_sum_nos: total_redeemed_sum_nos,
-            word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
-        };
+            let yes_cost = yes_sol.cost;
+            let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+            let redeemed_hard_nos = yes_cost.redeemed_hard_nos.max(no_cost.redeemed_hard_nos);
+            let nos = yes_cost.nos.max(no_cost.nos);
+            let redeemed_nos = yes_cost.redeemed_nos.max(no_cost.redeemed_nos);
+            let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
+            let total_sum_hard_nos = if spec.is_hard {
+                yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count
+            } else {
+                yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos
+            };
+            let total_redeemed_sum_nos = yes_sol.cost.redeemed_sum_nos + no_sol.cost.redeemed_sum_nos + (no_sol.cost.word_count as i32 * redeeming_yes as i32);
+            let total_redeemed_sum_hard_nos = if spec.is_hard {
+                yes_sol.cost.redeemed_sum_hard_nos + no_sol.cost.redeemed_sum_hard_nos + (no_sol.cost.word_count as i32 * redeeming_yes as i32)
+            } else {
+                yes_sol.cost.redeemed_sum_hard_nos + no_sol.cost.redeemed_sum_hard_nos
+            };
 
-        // Update best if this is better
-        match best_cost {
-            None => {
-                best_cost = Some(branch_cost);
-                for y in &yes_sol.trees {
-                    for n in &no_sol.trees {
+            let branch_cost = Cost {
+                hard_nos,
+                redeemed_hard_nos,
+                nos,
+                redeemed_nos,
+                sum_hard_nos: total_sum_hard_nos,
+                redeemed_sum_hard_nos: total_redeemed_sum_hard_nos,
+                sum_nos: total_sum_nos,
+                redeemed_sum_nos: total_redeemed_sum_nos,
+                word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
+            };
+
+            // Update best if this is better
+            match best_cost {
+                None => {
+                    best_cost = Some(branch_cost);
+                    for y in &yes_sol.trees {
                         best_trees.push(combine_positional_split(
                             spec.test_letter, spec.test_position,
-                            spec.req_letter, spec.req_position, y, n
+                            spec.req_letter, spec.req_position, y, no_branch_node
                         ));
                     }
                 }
+                Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no) {
+                    Ordering::Less => {
+                        best_trees.clear();
+                        best_cost = Some(branch_cost);
+                        for y in &yes_sol.trees {
+                            best_trees.push(combine_positional_split(
+                                spec.test_letter, spec.test_position,
+                                spec.req_letter, spec.req_position, y, no_branch_node
+                            ));
+                        }
+                    }
+                    Ordering::Equal => {
+                        for y in &yes_sol.trees {
+                            best_trees.push(combine_positional_split(
+                                spec.test_letter, spec.test_position,
+                                spec.req_letter, spec.req_position, y, no_branch_node
+                            ));
+                        }
+                    }
+                    Ordering::Greater => {}
+                },
             }
-            Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no) {
-                Ordering::Less => {
-                    best_trees.clear();
-                    best_cost = Some(branch_cost);
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            best_trees.push(combine_positional_split(
-                                spec.test_letter, spec.test_position,
-                                spec.req_letter, spec.req_position, y, n
-                            ));
-                        }
-                    }
+        };
+
+        // Process base split (no YesSplits)
+        for n in &no_sol.trees {
+            process_split(n, 0);
+        }
+
+        // Generate YesSplit-augmented versions if beneficial
+        // Only add YesSplits if no branch has enough words and redeeming_yes > 0
+        let no_word_count = mask_count(spec.no);
+        let min_words_for_yes_split = if allow_repeat { 3 } else { 2 };
+
+        if redeeming_yes > 0 && no_word_count >= min_words_for_yes_split {
+            for n in &no_sol.trees {
+                let augmented_trees = generate_yes_split_chains(
+                    n,
+                    spec.no,
+                    ctx,
+                    &no_constraints,
+                    redeeming_yes,
+                );
+
+                for (augmented_node, yes_split_count) in augmented_trees {
+                    process_split(&augmented_node, yes_split_count);
                 }
-                Ordering::Equal => {
-                    for y in &yes_sol.trees {
-                        for n in &no_sol.trees {
-                            best_trees.push(combine_positional_split(
-                                spec.test_letter, spec.test_position,
-                                spec.req_letter, spec.req_position, y, n
-                            ));
-                        }
-                    }
-                }
-                Ordering::Greater => {}
-            },
+            }
         }
     }
 

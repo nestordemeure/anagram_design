@@ -190,9 +190,19 @@ function renderNoBranch(mergedNode, path, prefix, out) {
     }
     renderYesFinal({ options: [{ info: { type: "leaf", word: option.info.word } }] }, `${path}_yes`, childPrefix, out);
   } else if (option.info.type === "yesSplit") {
-    // YesSplit should never appear as a No branch
-    console.error("YesSplit cannot be a No branch!");
-    out.lines.push(`${prefix}└─ No: [ERROR: YesSplit in No branch]`);
+    // YesSplit in a No branch position
+    const marker = isChoice ? `<span class="choice-node" data-path="${path}">└─ No: ${nodeText} ▼</span>` : `└─ No: ${nodeText}`;
+    out.lines.push(`${prefix}${marker}`);
+
+    if (isChoice) {
+      out.choices.push({ path, options: mergedNode.options, selectedIdx });
+    }
+
+    const childPrefix = `${prefix}   `;
+    // No "no" branch to render for YesSplit
+    if (option.yesBranch) {
+      renderYesFinal(option.yesBranch, `${path}_yes`, childPrefix, out);
+    }
   } else {
     // Another split in the No branch
     const marker = isChoice ? `<span class="choice-node" data-path="${path}">└─ No: ${nodeText} ▼</span>` : `└─ No: ${nodeText}`;

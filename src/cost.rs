@@ -54,6 +54,21 @@ pub fn add_no_edge(base: &Cost, is_hard: bool, redeeming_yes: i32) -> Cost
     }
 }
 
+/// Apply the cost impact of a YesSplit.
+/// YesSplits contribute -1 to all redeemed_* metrics (not scaled by redeeming_yes).
+pub fn add_yes_split(base: &Cost) -> Cost
+{
+    Cost { hard_nos: base.hard_nos,
+           redeemed_hard_nos: base.redeemed_hard_nos - 1,
+           nos: base.nos,
+           redeemed_nos: base.redeemed_nos - 1,
+           sum_hard_nos: base.sum_hard_nos,
+           redeemed_sum_hard_nos: base.redeemed_sum_hard_nos - 1,
+           sum_nos: base.sum_nos,
+           redeemed_sum_nos: base.redeemed_sum_nos - 1,
+           word_count: base.word_count }
+}
+
 /// Estimate lower bound cost for a state (used for candidate ordering).
 /// This provides an optimistic (lower) bound that guarantees we won't prune optimal solutions.
 pub fn estimate_cost(mask: Mask, allow_repeat: bool, redeeming_yes: u32) -> Cost

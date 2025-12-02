@@ -114,9 +114,27 @@ pub fn format_tree(node: &Node) -> String {
                 render_no_branch(no, &format!("{}│", child_prefix), out);
                 render_yes_final(yes, &child_prefix, out);
             }
-            Node::YesSplit { .. } => {
-                // YesSplit should never appear as a No branch
-                panic!("YesSplit cannot be a No branch");
+            Node::YesSplit {
+                test_letter,
+                test_position,
+                requirement_letter,
+                requirement_position,
+                yes,
+            } => {
+                // YesSplit in a No branch position
+                out.push_str(prefix);
+                out.push_str("└─ No: ");
+                out.push_str(&format_position_question(
+                    *test_letter,
+                    test_position,
+                    *requirement_letter,
+                    requirement_position,
+                ));
+                out.push_str(" [YES-ONLY]\n");
+
+                let child_prefix = format!("{}   ", prefix);
+                // No "no" branch to render for YesSplit
+                render_yes_final(yes, &child_prefix, out);
             }
         }
     }
