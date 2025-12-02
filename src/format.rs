@@ -191,8 +191,7 @@ pub fn format_tree(node: &Node) -> String {
 
                 render_no_branch(no, &format!("{}│", prefix), out);
 
-                out.push_str(prefix);
-                out.push_str("│\n");
+                // No spacer line needed - next node will add its own if needed
 
                 render_yes_final(yes, prefix, out);
             }

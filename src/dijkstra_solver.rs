@@ -94,14 +94,19 @@ fn find_valid_yes_splits(
 
 /// Generate all YesSplit chains wrapping a base node.
 /// Returns tuples of (augmented_node, cost_delta) where cost_delta is the number of YesSplits added.
-fn generate_yes_split_chains(
+/// parent_exclusions: (position, letter_idx) pairs from parent split to exclude from YesSplit chains.
+fn generate_yes_split_chains_with_exclusions(
     base_node: &NodeRef,
     mask: Mask,
     ctx: &Context<'_>,
     constraints: &Constraints,
     max_chain_length: u32,
+    parent_exclusions: &[(Position, usize)],
 ) -> Vec<(NodeRef, u32)> {
     let mut results = Vec::new();
+
+    // Track used (position, letter_idx) pairs to avoid redundant YesSplits
+    type UsedPairs = SmallVec<[(Position, usize); 8]>;
 
     // Helper: recursively build chains
     fn build_chains(
@@ -109,6 +114,7 @@ fn generate_yes_split_chains(
         mask: Mask,
         ctx: &Context<'_>,
         constraints: Constraints,
+        used_pairs: &UsedPairs,
         remaining_depth: u32,
         current_depth: u32,
         results: &mut Vec<(NodeRef, u32)>,
@@ -121,6 +127,11 @@ fn generate_yes_split_chains(
         let valid_splits = find_valid_yes_splits(mask, ctx, &constraints);
 
         for (position, idx, letter) in valid_splits {
+            // Skip if this (position, letter) pair was already used in the chain or parent
+            if used_pairs.iter().any(|(pos, letter_idx)| *pos == position && *letter_idx == idx) {
+                continue;
+            }
+
             // Create YesSplit node wrapping current_node
             let yes_split_node = combine_yes_split(
                 letter,
@@ -144,12 +155,17 @@ fn generate_yes_split_chains(
                 None, // no branch doesn't exist for YesSplit
             );
 
+            // Track this (position, letter) pair as used
+            let mut next_used_pairs = used_pairs.clone();
+            next_used_pairs.push((position, idx));
+
             // Recursively try adding more YesSplits
             build_chains(
                 yes_split_node,
                 mask,
                 ctx,
                 next_constraints,
+                &next_used_pairs,
                 remaining_depth - 1,
                 current_depth + 1,
                 results,
@@ -157,11 +173,18 @@ fn generate_yes_split_chains(
         }
     }
 
+    // Initialize used_pairs with parent exclusions
+    let mut used_pairs: UsedPairs = SmallVec::new();
+    for &(pos, idx) in parent_exclusions {
+        used_pairs.push((pos, idx));
+    }
+
     build_chains(
         Rc::clone(base_node),
         mask,
         ctx,
         *constraints,
+        &used_pairs,
         max_chain_length,
         0,
         &mut results,
@@ -658,12 +681,20 @@ pub(crate) fn solve(
 
         if redeeming_yes > 0 && no_word_count >= min_words_for_yes_split {
             for n in &no_sol.trees {
-                let augmented_trees = generate_yes_split_chains(
+                // Pass parent split's (letter, position) pairs to prevent redundant YesSplits
+                // For the no branch, we forbid reusing both test and requirement positions
+                let parent_pairs = vec![
+                    (spec.test_position, spec.test_idx),
+                    (spec.req_position, spec.req_idx),
+                ];
+
+                let augmented_trees = generate_yes_split_chains_with_exclusions(
                     n,
                     spec.no,
                     ctx,
                     &no_constraints,
                     redeeming_yes,
+                    &parent_pairs,
                 );
 
                 for (augmented_node, yes_split_count) in augmented_trees {

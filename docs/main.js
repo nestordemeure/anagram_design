@@ -276,7 +276,7 @@ function renderYesFinal(mergedNode, path, prefix, out) {
     if (option.noBranch) {
       renderNoBranch(option.noBranch, `${path}_no`, `${prefix}│`, out);
     }
-    out.lines.push(`${prefix}│`);
+    // No spacer line needed - next node will add its own if needed
     if (option.yesBranch) {
       renderYesFinal(option.yesBranch, `${path}_yes`, prefix, out);
     }

@@ -144,8 +144,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* do not allow consecutive identical positions
-
 * should normal yes impact redeemed costs?
 * should YesSplits be allowed in yes branches?
 * the heuristic is a bit pessimistic (ne redemption expected) but an accurate one fails
