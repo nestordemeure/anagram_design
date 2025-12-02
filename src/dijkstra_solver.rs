@@ -110,114 +110,6 @@ fn find_valid_yes_splits(mask: Mask,
     valid_yes_splits
 }
 
-/// Generate all YesSplit chains wrapping a base node.
-/// Returns tuples of (augmented_node, cost_delta) where cost_delta is the number of YesSplits added.
-/// parent_exclusions: (position, letter_idx) pairs from parent split to exclude from YesSplit chains.
-/// parent_hard_split: If Some((idx, pos)), filter out yes splits that would be equivalent to soft splits.
-fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
-                                             mask: Mask,
-                                             ctx: &Context<'_>,
-                                             constraints: &Constraints,
-                                             max_chain_length: u32,
-                                             parent_exclusions: &[(Position, usize)],
-                                             parent_hard_split: Option<(usize, Position)>)
-                                             -> Vec<(NodeRef, u32)>
-{
-    let mut results = Vec::new();
-
-    // Track used (position, letter_idx) pairs to avoid redundant YesSplits
-    type UsedPairs = SmallVec<[(Position, usize); 8]>;
-
-    // Depth tracking for chain building
-    struct ChainDepth {
-        remaining: u32,
-        current: u32,
-    }
-
-    // Helper: recursively build chains
-    fn build_chains(current_node: NodeRef,
-                    mask: Mask,
-                    ctx: &Context<'_>,
-                    constraints: Constraints,
-                    used_pairs: &UsedPairs,
-                    depth: ChainDepth,
-                    results: &mut Vec<(NodeRef, u32)>,
-                    parent_hard_split: Option<(usize, Position)>)
-    {
-        if depth.remaining == 0
-        {
-            return;
-        }
-
-        // Find valid YesSplits at this level
-        // Only pass parent_hard_split for immediate children (depth.current == 0)
-        let parent_hard_split_filter = if depth.current == 0 { parent_hard_split } else { None };
-        let valid_splits = find_valid_yes_splits(mask, ctx, &constraints, parent_hard_split_filter);
-
-        for (position, idx, letter) in valid_splits
-        {
-            // Skip if this (position, letter) pair was already used in the chain or parent
-            if used_pairs.iter().any(|(pos, letter_idx)| *pos == position && *letter_idx == idx)
-            {
-                continue;
-            }
-
-            // Create YesSplit node wrapping current_node
-            let yes_split_node = combine_yes_split(letter,
-                                                   position,
-                                                   letter, // requirement_letter same as test_letter for hard splits
-                                                   position, // requirement_position same as test_position
-                                                   &current_node);
-
-            // Record this augmented version
-            results.push((yes_split_node.clone(), depth.current + 1));
-
-            // Update constraints for next level (like hard splits do)
-            let test_bit = 1u32 << idx;
-            let (next_constraints, _) = branch_constraints(
-                &constraints,
-                idx,
-                idx, // same as test_idx for hard splits
-                position,
-                Some(test_bit), // yes branch allows this letter once
-                None, // no branch doesn't exist for YesSplit
-            );
-
-            // Track this (position, letter) pair as used
-            let mut next_used_pairs = used_pairs.clone();
-            next_used_pairs.push((position, idx));
-
-            // Recursively try adding more YesSplits
-            build_chains(yes_split_node,
-                         mask,
-                         ctx,
-                         next_constraints,
-                         &next_used_pairs,
-                         ChainDepth { remaining: depth.remaining - 1, current: depth.current + 1 },
-                         results,
-                         parent_hard_split);
-        }
-    }
-
-    // Initialize used_pairs with parent exclusions
-    let mut used_pairs: UsedPairs = SmallVec::new();
-    for &(pos, idx) in parent_exclusions
-    {
-        used_pairs.push((pos, idx));
-    }
-
-    build_chains(Rc::clone(base_node),
-                 mask,
-                 ctx,
-                 *constraints,
-                 &used_pairs,
-                 ChainDepth { remaining: max_chain_length, current: 0 },
-                 &mut results,
-                 parent_hard_split);
-
-    results
-}
-
 /// Generate all valid splits for a given position
 fn generate_position_splits(position: Position,
                             mask: Mask,
@@ -746,40 +638,221 @@ pub(crate) fn solve(mask: Mask,
             process_split(n, 0);
         }
 
-        // Generate YesSplit-augmented versions if beneficial
+        // Build YesSplit layers incrementally with re-solving
         // Only add YesSplits if no branch has enough words and redeeming_yes > 0
         let no_word_count = mask_count(spec.no);
         let min_words_for_yes_split = if allow_repeat { 3 } else { 2 };
 
         if redeeming_yes > 0 && no_word_count >= min_words_for_yes_split
         {
-            for n in &no_sol.trees
+            // Track (position, letter_idx) pairs already used in parent split
+            let parent_exclusions: SmallVec<[(Position, usize); 4]> =
+                SmallVec::from_vec(vec![(spec.test_position, spec.test_idx),
+                                        (spec.req_position, spec.req_idx)]);
+
+            // If parent is a hard split, pass info to avoid redundant yes splits
+            let parent_hard_split = if spec.is_hard {
+                Some((spec.test_idx, spec.test_position))
+            } else {
+                None
+            };
+
+            // Track YesSplits that produced bad/unsolvable results
+            let mut failed_yes_splits: SmallVec<[(Position, usize); 8]> = SmallVec::new();
+
+            // Current layer: (solution, constraints, yessplit_chain)
+            type LayerEntry = (Solution, Constraints, SmallVec<[(Position, usize, char); 8]>);
+            let mut current_layer: Vec<LayerEntry> = vec![(no_sol.clone(), no_constraints, SmallVec::new())];
+
+            // Build layers incrementally
+            for _layer_num in 1..=redeeming_yes
             {
-                // Pass parent split's (letter, position) pairs to prevent redundant YesSplits
-                // For the no branch, we forbid reusing both test and requirement positions
-                let parent_pairs =
-                    vec![(spec.test_position, spec.test_idx), (spec.req_position, spec.req_idx),];
+                let mut next_layer: Vec<LayerEntry> = Vec::new();
 
-                // If parent is a hard split, pass info to avoid redundant yes splits
-                // that would be equivalent to soft splits
-                let parent_hard_split = if spec.is_hard {
-                    Some((spec.test_idx, spec.test_position))
-                } else {
-                    None
-                };
-
-                let augmented_trees = generate_yes_split_chains_with_exclusions(n,
-                                                                                spec.no,
-                                                                                ctx,
-                                                                                &no_constraints,
-                                                                                redeeming_yes,
-                                                                                &parent_pairs,
-                                                                                parent_hard_split);
-
-                for (augmented_node, yes_split_count) in augmented_trees
+                for (_prev_sol, prev_constraints, prev_chain) in &current_layer
                 {
-                    process_split(&augmented_node, yes_split_count);
+                    // Find valid YesSplits at this layer (only immediate children for first layer)
+                    let parent_hard_split_filter = if prev_chain.is_empty() { parent_hard_split } else { None };
+                    let valid_splits = find_valid_yes_splits(spec.no, ctx, prev_constraints, parent_hard_split_filter);
+
+                    for (position, idx, letter) in valid_splits
+                    {
+                        // Skip if already used in parent split, previous chain, or marked as failed
+                        let already_used = parent_exclusions.iter().any(|(p, i)| *p == position && *i == idx)
+                                          || prev_chain.iter().any(|(p, i, _)| *p == position && *i == idx)
+                                          || failed_yes_splits.iter().any(|(p, i)| *p == position && *i == idx);
+
+                        if already_used
+                        {
+                            continue;
+                        }
+
+                        // Update constraints with this YesSplit (like hard splits do)
+                        let test_bit = 1u32 << idx;
+                        let (new_constraints, _) = branch_constraints(
+                            prev_constraints,
+                            idx,
+                            idx, // same as test_idx for YesSplits (hard splits)
+                            position,
+                            Some(test_bit), // yes branch allows this letter once
+                            None, // no branch doesn't exist for YesSplit
+                        );
+
+                        // RE-SOLVE with updated constraints
+                        let new_sol = solve(spec.no, ctx, allow_repeat, prioritize_soft_no, redeeming_yes, new_constraints, memo);
+
+                        // Check if this YesSplit produced a bad/unsolvable result
+                        if new_sol.is_unsolvable()
+                        {
+                            // Mark this YesSplit as failed - don't try it in future layers
+                            if !failed_yes_splits.iter().any(|(p, i)| *p == position && *i == idx)
+                            {
+                                failed_yes_splits.push((position, idx));
+                            }
+                            continue;
+                        }
+
+                        // Build the YesSplit chain
+                        let mut new_chain = prev_chain.clone();
+                        new_chain.push((position, idx, letter));
+                        let yes_split_count = new_chain.len() as u32;
+
+                        // Calculate cost for this YesSplit combination
+                        let mut no_cost = add_no_edge(&new_sol.cost, spec.is_hard, redeeming_yes as i32);
+
+                        // Apply YesSplit cost adjustments (-1 per YesSplit)
+                        for _ in 0..yes_split_count
+                        {
+                            no_cost = add_yes_split(&no_cost);
+                        }
+
+                        // Add word_count contributions to no_cost sum metrics
+                        no_cost.sum_nos += new_sol.cost.word_count;
+                        no_cost.redeemed_sum_nos += new_sol.cost.word_count as i32 * redeeming_yes as i32;
+                        if spec.is_hard
+                        {
+                            no_cost.sum_hard_nos += new_sol.cost.word_count;
+                            no_cost.redeemed_sum_hard_nos += new_sol.cost.word_count as i32 * redeeming_yes as i32;
+                        }
+
+                        // Cap redeemed costs to not be negative
+                        no_cost.redeemed_hard_nos = no_cost.redeemed_hard_nos.max(0);
+                        no_cost.redeemed_nos = no_cost.redeemed_nos.max(0);
+                        no_cost.redeemed_sum_hard_nos = no_cost.redeemed_sum_hard_nos.max(0);
+                        no_cost.redeemed_sum_nos = no_cost.redeemed_sum_nos.max(0);
+
+                        let yes_cost = add_yes_split(&yes_sol.cost);
+                        let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+                        let redeemed_hard_nos = yes_cost.redeemed_hard_nos.max(no_cost.redeemed_hard_nos);
+                        let nos = yes_cost.nos.max(no_cost.nos);
+                        let redeemed_nos = yes_cost.redeemed_nos.max(no_cost.redeemed_nos);
+                        let total_sum_nos = yes_sol.cost.sum_nos + no_cost.sum_nos;
+                        let total_sum_hard_nos = yes_sol.cost.sum_hard_nos + no_cost.sum_hard_nos;
+                        let total_redeemed_sum_nos = yes_sol.cost.redeemed_sum_nos + no_cost.redeemed_sum_nos;
+                        let total_redeemed_sum_hard_nos =
+                            yes_sol.cost.redeemed_sum_hard_nos + no_cost.redeemed_sum_hard_nos;
+
+                        let branch_cost = Cost { hard_nos,
+                                                 redeemed_hard_nos,
+                                                 nos,
+                                                 redeemed_nos,
+                                                 sum_hard_nos: total_sum_hard_nos,
+                                                 redeemed_sum_hard_nos: total_redeemed_sum_hard_nos,
+                                                 sum_nos: total_sum_nos,
+                                                 redeemed_sum_nos: total_redeemed_sum_nos,
+                                                 word_count: yes_sol.cost.word_count + new_sol.cost.word_count };
+
+                        // Check if this solution is competitive with current best
+                        let should_skip = if let Some(ref current_best) = best_cost
+                        {
+                            compare_costs(&branch_cost, current_best, prioritize_soft_no) == Ordering::Greater
+                        }
+                        else
+                        {
+                            false
+                        };
+
+                        if should_skip
+                        {
+                            // Mark this YesSplit as failed - don't try it in future layers
+                            if !failed_yes_splits.iter().any(|(p, i)| *p == position && *i == idx)
+                            {
+                                failed_yes_splits.push((position, idx));
+                            }
+                            continue;
+                        }
+
+                        // Add to next layer for further exploration
+                        next_layer.push((new_sol.clone(), new_constraints, new_chain.clone()));
+
+                        // Update best solution with this YesSplit combination
+                        for tree in &new_sol.trees
+                        {
+                            // Build the YesSplit chain wrapping this tree
+                            let mut wrapped_tree = Rc::clone(tree);
+                            for (ys_pos, _, ys_letter) in &new_chain
+                            {
+                                wrapped_tree = combine_yes_split(*ys_letter, *ys_pos, *ys_letter, *ys_pos, &wrapped_tree);
+                            }
+
+                            // Combine with yes branch to form complete tree
+                            match best_cost
+                            {
+                                None =>
+                                {
+                                    best_cost = Some(branch_cost);
+                                    for y in &yes_sol.trees
+                                    {
+                                        best_trees.push(combine_positional_split(spec.test_letter,
+                                                                                 spec.test_position,
+                                                                                 spec.req_letter,
+                                                                                 spec.req_position,
+                                                                                 y,
+                                                                                 &wrapped_tree));
+                                    }
+                                }
+                                Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no)
+                                {
+                                    Ordering::Less =>
+                                    {
+                                        best_trees.clear();
+                                        best_cost = Some(branch_cost);
+                                        for y in &yes_sol.trees
+                                        {
+                                            best_trees.push(combine_positional_split(spec.test_letter,
+                                                                                     spec.test_position,
+                                                                                     spec.req_letter,
+                                                                                     spec.req_position,
+                                                                                     y,
+                                                                                     &wrapped_tree));
+                                        }
+                                    }
+                                    Ordering::Equal =>
+                                    {
+                                        for y in &yes_sol.trees
+                                        {
+                                            best_trees.push(combine_positional_split(spec.test_letter,
+                                                                                     spec.test_position,
+                                                                                     spec.req_letter,
+                                                                                     spec.req_position,
+                                                                                     y,
+                                                                                     &wrapped_tree));
+                                        }
+                                    }
+                                    Ordering::Greater =>
+                                    {}
+                                }
+                            }
+                        }
+                    }
                 }
+
+                // Move to next layer (or stop if no improvements found)
+                if next_layer.is_empty()
+                {
+                    break;
+                }
+                current_layer = next_layer;
             }
         }
     }
