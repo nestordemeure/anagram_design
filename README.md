@@ -138,3 +138,13 @@ python3 -m http.server 8000 --directory docs             # then open http://loca
 Use `wasm-bindgen-cli 0.2.95` to match the pinned crate version (or update both in lockstep).
 
 To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled `pkg/` assets are served alongside `index.html`.
+
+## TODO
+
+* try a sum_yes instead of sum no / hard no
+
+* redeeming yes
+  * introduce redeeming hits to UI / solver
+  * introcue redeeming_costs, unsigned integers, scaled by redeeming hits, take priority to their non redeemed equivalent
+  * introduce redeeming splits, they have negative redeemed costs
+  * gave solver an exhaustive redeeming split adder
