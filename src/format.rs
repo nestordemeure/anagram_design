@@ -114,6 +114,10 @@ pub fn format_tree(node: &Node) -> String {
                 render_no_branch(no, &format!("{}│", child_prefix), out);
                 render_yes_final(yes, &child_prefix, out);
             }
+            Node::YesSplit { .. } => {
+                // YesSplit should never appear as a No branch
+                panic!("YesSplit cannot be a No branch");
+            }
         }
     }
 
@@ -174,6 +178,33 @@ pub fn format_tree(node: &Node) -> String {
 
                 render_yes_final(yes, prefix, out);
             }
+            Node::YesSplit {
+                test_letter,
+                test_position,
+                requirement_letter,
+                requirement_position,
+                yes,
+            } => {
+                // YesSplit: like a hard split but with no "no" branch
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                out.push_str(prefix);
+                out.push_str(&format_position_question(
+                    *test_letter,
+                    test_position,
+                    *requirement_letter,
+                    requirement_position,
+                ));
+                out.push_str(" [YES-ONLY]\n");
+
+                // No "no" branch to render
+
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                render_yes_final(yes, prefix, out);
+            }
         }
     }
 
@@ -224,6 +255,32 @@ pub fn format_tree(node: &Node) -> String {
 
                 // No branch diverges sideways
                 render_no_branch(no, &format!("{}│", prefix), out);
+
+                // Spacer line for clarity between decision points
+                out.push_str(prefix);
+                out.push_str("│\n");
+
+                // Continue down the Yes spine
+                render_spine(yes, prefix, is_final, out);
+            }
+            Node::YesSplit {
+                test_letter,
+                test_position,
+                requirement_letter,
+                requirement_position,
+                yes,
+            } => {
+                // YesSplit: like a hard split but with no "no" branch
+                out.push_str(prefix);
+                out.push_str(&format_position_question(
+                    *test_letter,
+                    test_position,
+                    *requirement_letter,
+                    requirement_position,
+                ));
+                out.push_str(" [YES-ONLY]\n");
+
+                // No "no" branch to render
 
                 // Spacer line for clarity between decision points
                 out.push_str(prefix);

@@ -144,5 +144,4 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 ## TODO
 
 * redeeming yes
-  * introduce redeeming splits, they have negative redeemed costs
   * gave solver an exhaustive redeeming split adder

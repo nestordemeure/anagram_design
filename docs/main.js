@@ -147,6 +147,19 @@ function formatNodeInfo(info) {
         return `${testDesc} (${reqDesc})`;
       }
     }
+    case "yesSplit": {
+      const { testLetter, testPosition, requirementLetter, requirementPosition } = info;
+
+      // YesSplit: like a hard split but with no "no" branch
+      if (testLetter === requirementLetter && testPosition === requirementPosition) {
+        return `${formatPosition(testPosition)} '${displayLetter(testLetter)}'? [YES-ONLY]`;
+      } else {
+        // Soft YesSplit
+        const testDesc = `${formatPosition(testPosition)} '${displayLetter(testLetter)}'?`;
+        const reqDesc = formatRequirement(requirementPosition, requirementLetter);
+        return `${testDesc} (${reqDesc}) [YES-ONLY]`;
+      }
+    }
     default:
       console.error("Unknown node type:", info.type);
       return "[Unknown node type]";
@@ -176,6 +189,10 @@ function renderNoBranch(mergedNode, path, prefix, out) {
       renderNoBranch(option.noBranch, `${path}_no`, `${childPrefix}│`, out);
     }
     renderYesFinal({ options: [{ info: { type: "leaf", word: option.info.word } }] }, `${path}_yes`, childPrefix, out);
+  } else if (option.info.type === "yesSplit") {
+    // YesSplit should never appear as a No branch
+    console.error("YesSplit cannot be a No branch!");
+    out.lines.push(`${prefix}└─ No: [ERROR: YesSplit in No branch]`);
   } else {
     // Another split in the No branch
     const marker = isChoice ? `<span class="choice-node" data-path="${path}">└─ No: ${nodeText} ▼</span>` : `└─ No: ${nodeText}`;
@@ -220,6 +237,22 @@ function renderYesFinal(mergedNode, path, prefix, out) {
     }
     out.lines.push(`${prefix}│`);
     renderYesFinal({ options: [{ info: { type: "leaf", word: option.info.word } }] }, `${path}_yes`, prefix, out);
+  } else if (option.info.type === "yesSplit") {
+    // YesSplit: like a split but with no "no" branch
+    out.lines.push(`${prefix}│`);
+    const marker = isChoice ? `<span class="choice-node" data-path="${path}">${nodeText} ▼</span>` : nodeText;
+    out.lines.push(`${prefix}${marker}`);
+
+    if (isChoice) {
+      out.choices.push({ path, options: mergedNode.options, selectedIdx });
+    }
+
+    // No "no" branch to render
+
+    out.lines.push(`${prefix}│`);
+    if (option.yesBranch) {
+      renderYesFinal(option.yesBranch, `${path}_yes`, prefix, out);
+    }
   } else {
     // Split in Yes position - continue the spine
     out.lines.push(`${prefix}│`);
@@ -269,6 +302,24 @@ function renderSpine(mergedNode, path, prefix, isFinal, out) {
     }
     out.lines.push(`${prefix}│`);
     renderSpine({ options: [{ info: { type: "leaf", word: option.info.word } }] }, `${path}_yes`, prefix, isFinal, out);
+  } else if (option.info.type === "yesSplit") {
+    // YesSplit: like a split but with no "no" branch
+    const marker = isChoice ? `<span class="choice-node" data-path="${path}">${nodeText} ▼</span>` : nodeText;
+    out.lines.push(`${prefix}${marker}`);
+
+    if (isChoice) {
+      out.choices.push({ path, options: mergedNode.options, selectedIdx });
+    }
+
+    // No "no" branch to render
+
+    // Spacer line
+    out.lines.push(`${prefix}│`);
+
+    // Continue down Yes spine
+    if (option.yesBranch) {
+      renderSpine(option.yesBranch, `${path}_yes`, prefix, isFinal, out);
+    }
   } else {
     // Regular split - print question
     const marker = isChoice ? `<span class="choice-node" data-path="${path}">${nodeText} ▼</span>` : nodeText;

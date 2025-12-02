@@ -69,6 +69,22 @@ pub enum Node {
         yes: Rc<Node>,
         no: Rc<Node>,
     },
+    /// Yes-only split: applies when condition is true for all words.
+    /// Like a hard split but only has a yes branch.
+    /// Contributes -1 to redeemed_* cost metrics.
+    YesSplit {
+        /// Letter to test for (primary letter)
+        test_letter: char,
+        /// Position where to test
+        test_position: Position,
+        /// Letter required (secondary letter, for constraint tracking)
+        /// Typically same as test_letter for hard-split-like behavior
+        requirement_letter: char,
+        /// Position where requirement is checked
+        /// Typically same as test_position for hard-split-like behavior
+        requirement_position: Position,
+        yes: Rc<Node>,
+    },
 }
 
 pub type NodeRef = Rc<Node>;
@@ -120,6 +136,23 @@ pub fn combine_positional_split(
         requirement_position,
         yes: Rc::clone(left),
         no: Rc::clone(right),
+    })
+}
+
+/// Create a yes-only split node
+pub fn combine_yes_split(
+    test_letter: char,
+    test_position: Position,
+    requirement_letter: char,
+    requirement_position: Position,
+    yes: &NodeRef,
+) -> NodeRef {
+    Rc::new(Node::YesSplit {
+        test_letter,
+        test_position,
+        requirement_letter,
+        requirement_position,
+        yes: Rc::clone(yes),
     })
 }
 

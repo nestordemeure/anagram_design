@@ -14,6 +14,12 @@ pub enum NodeInfo {
         requirement_letter: char,
         requirement_position: Position,
     },
+    YesSplit {
+        test_letter: char,
+        test_position: Position,
+        requirement_letter: char,
+        requirement_position: Position,
+    },
 }
 
 impl NodeInfo {
@@ -29,6 +35,18 @@ impl NodeInfo {
                 requirement_position,
                 ..
             } => NodeInfo::PositionalSplit {
+                test_letter: *test_letter,
+                test_position: *test_position,
+                requirement_letter: *requirement_letter,
+                requirement_position: *requirement_position,
+            },
+            Node::YesSplit {
+                test_letter,
+                test_position,
+                requirement_letter,
+                requirement_position,
+                ..
+            } => NodeInfo::YesSplit {
                 test_letter: *test_letter,
                 test_position: *test_position,
                 requirement_letter: *requirement_letter,
@@ -91,6 +109,9 @@ impl MergedNode {
                         Node::PositionalSplit { yes, no, .. } => {
                             yes_branches.push(yes.clone());
                             no_branches.push(no.clone());
+                        }
+                        Node::YesSplit { yes, .. } => {
+                            yes_branches.push(yes.clone());
                         }
                     }
                 }

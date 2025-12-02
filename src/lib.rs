@@ -49,6 +49,10 @@ mod tests
                     walk(yes, out);
                     walk(no, out);
                 }
+                Node::YesSplit { yes, .. } =>
+                {
+                    walk(yes, out);
+                }
             }
         }
 
