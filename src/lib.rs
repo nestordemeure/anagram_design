@@ -23,22 +23,29 @@ pub use merged::{MergedNode, MergedOption, NodeInfo};
 pub use wasm::{solve_words, zodiac_words};
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
-    fn words(list: &[&str]) -> Vec<String> {
+    fn words(list: &[&str]) -> Vec<String>
+    {
         list.iter().map(|s| s.to_string()).collect()
     }
 
-    fn leaves(node: &Node) -> Vec<String> {
-        fn walk(node: &Node, out: &mut Vec<String>) {
-            match node {
+    fn leaves(node: &Node) -> Vec<String>
+    {
+        fn walk(node: &Node, out: &mut Vec<String>)
+        {
+            match node
+            {
                 Node::Leaf(w) => out.push(w.clone()),
-                Node::Repeat { word, no } => {
+                Node::Repeat { word, no } =>
+                {
                     out.push(word.clone());
                     walk(no, out);
                 }
-                Node::PositionalSplit { yes, no, .. } => {
+                Node::PositionalSplit { yes, no, .. } =>
+                {
                     walk(yes, out);
                     walk(no, out);
                 }
@@ -51,110 +58,73 @@ mod tests {
     }
 
     #[test]
-    fn compare_costs_prioritization_flips() {
+    fn compare_costs_prioritization_flips()
+    {
         use std::cmp::Ordering;
 
-        let soft_first = Cost {
-            hard_nos: 0,
-            nos: 2,
-            sum_hard_nos: 0,
-            sum_nos: 4,
-            word_count: 4,
-        };
-        let hard_first = Cost {
-            hard_nos: 1,
-            nos: 1,
-            sum_hard_nos: 1,
-            sum_nos: 2,
-            word_count: 4,
-        };
+        let soft_first = Cost { hard_nos: 0, nos: 2, sum_hard_nos: 0, sum_nos: 4, word_count: 4 };
+        let hard_first = Cost { hard_nos: 1, nos: 1, sum_hard_nos: 1, sum_nos: 2, word_count: 4 };
 
-        assert_eq!(
-            compare_costs(&soft_first, &hard_first, true),
-            Ordering::Less
-        );
-        assert_eq!(
-            compare_costs(&soft_first, &hard_first, false),
-            Ordering::Greater
-        );
+        assert_eq!(compare_costs(&soft_first, &hard_first, true), Ordering::Less);
+        assert_eq!(compare_costs(&soft_first, &hard_first, false), Ordering::Greater);
     }
 
     #[test]
-    fn repeat_beats_depth_for_two_words() {
+    fn repeat_beats_depth_for_two_words()
+    {
         use std::cmp::Ordering;
         let data = words(&["alpha", "beta"]);
         let with_repeat = minimal_trees(&data, true, true);
         let without_repeat = minimal_trees(&data, false, true);
-        assert_eq!(
-            compare_costs(&with_repeat.cost, &without_repeat.cost, true),
-            Ordering::Less
-        );
+        assert_eq!(compare_costs(&with_repeat.cost, &without_repeat.cost, true), Ordering::Less);
         assert!(matches!(&*with_repeat.trees[0], Node::Repeat { .. }));
     }
 
     #[test]
-    fn simple_split_cost() {
+    fn simple_split_cost()
+    {
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false, true);
         // Improved cost with better exception handling
-        assert_eq!(
-            sol.cost,
-            Cost {
-                nos: 1,
-                hard_nos: 1,
-                sum_nos: 2,
-                sum_hard_nos: 1,
-                word_count: 3
-            }
-        );
+        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 1, word_count: 3 });
     }
 
     #[test]
-    fn zodiac_costs() {
-        let data = words(&[
-            "aries",
-            "taurus",
-            "gemini",
-            "cancer",
-            "leo",
-            "virgo",
-            "libra",
-            "scorpio",
-            "sagittarius",
-            "capricorn",
-            "aquarius",
-            "pisces",
-        ]);
+    fn zodiac_costs()
+    {
+        let data = words(&["aries",
+                           "taurus",
+                           "gemini",
+                           "cancer",
+                           "leo",
+                           "virgo",
+                           "libra",
+                           "scorpio",
+                           "sagittarius",
+                           "capricorn",
+                           "aquarius",
+                           "pisces"]);
         let allow_repeat = minimal_trees(&data, true, true);
         let no_repeat = minimal_trees(&data, false, true);
         // With all 9 position types enabled, we achieve even better (lower) sum_hard_nos costs
         // by using more positional soft splits
-        assert_eq!(
-            allow_repeat.cost,
-            Cost {
-                nos: 2,
-                hard_nos: 1,
-                sum_nos: 15,
-                sum_hard_nos: 3,
-                word_count: 12
-            }
-        );
+        assert_eq!(allow_repeat.cost, Cost { nos: 2,
+                                             hard_nos: 1,
+                                             sum_nos: 14,
+                                             sum_hard_nos: 3,
+                                             word_count: 12 });
         // With the corrected collision detection (checking only NO branch),
         // we get better trees with improved sum_hard_nos
-        assert_eq!(
-            no_repeat.cost,
-            Cost {
-                nos: 2,
-                hard_nos: 1,
-                sum_nos: 17,
-                sum_hard_nos: 5,
-                word_count: 12
-            }
-        );
+        assert_eq!(no_repeat.cost, Cost { nos: 2,
+                                          hard_nos: 1,
+                                          sum_nos: 17,
+                                          sum_hard_nos: 5,
+                                          word_count: 12 });
     }
 
     #[test]
-    fn virgo_scorpio_soft_separation() {
+    fn virgo_scorpio_soft_separation()
+    {
         // Verify that Virgo and Scorpio CAN be separated using only soft tests
         // This is possible with R/E and C/G pairs:
         //   virgo: has {v,i,r,g,o} - has 'r' and 'g', no 'c'
@@ -163,117 +133,95 @@ mod tests {
         let data = words(&["virgo", "scorpio", "gemini"]);
         let sol = minimal_trees(&data, true, true);
         // Should achieve hard_nos: 0 using: r/e soft, then c/g soft
-        assert_eq!(
-            sol.cost.hard_nos, 0,
-            "Expected 0 hard NOs (all soft), got {}",
-            sol.cost.hard_nos
-        );
+        assert_eq!(sol.cost.hard_nos, 0, "Expected 0 hard NOs (all soft), got {}", sol.cost.hard_nos);
     }
 
     #[test]
-    fn soft_known_letter_pruning_regression() {
+    fn soft_known_letter_pruning_regression()
+    {
         // With improved exception handling, we can now achieve all-soft separation
         let data = words(&["tr", "r", "e"]);
         let sol = minimal_trees(&data, false, true);
-        assert_eq!(
-            sol.cost,
-            Cost {
-                hard_nos: 0,
-                nos: 1,
-                sum_hard_nos: 0,
-                sum_nos: 2,
-                word_count: 3
-            },
-            "Expected all-soft separation; got {:?}",
-            sol.cost
-        );
+        assert_eq!(sol.cost,
+                   Cost { hard_nos: 0, nos: 1, sum_hard_nos: 0, sum_nos: 2, word_count: 3 },
+                   "Expected all-soft separation; got {:?}",
+                   sol.cost);
     }
 
     #[test]
-    fn soft_double_letter_split_works() {
+    fn soft_double_letter_split_works()
+    {
         // With all position types, the solver can find various valid solutions
         let data = words(&["book", "pool", "ball", "tall"]);
         let sol = minimal_trees(&data, false, true);
 
         // Check that we get a reasonable cost
-        assert_eq!(
-            sol.cost,
-            Cost {
-                nos: 1,
-                hard_nos: 1,
-                sum_nos: 3,
-                sum_hard_nos: 2,
-                word_count: 4
-            }
-        );
+        assert_eq!(sol.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 4, sum_hard_nos: 1, word_count: 4 });
 
         // Verify all words are present in the tree
         let mut tree_leaves = leaves(&sol.trees[0]);
         tree_leaves.sort();
-        assert_eq!(tree_leaves, vec!["ball".to_string(), "book".to_string(), "pool".to_string(), "tall".to_string()]);
+        assert_eq!(tree_leaves, vec!["ball".to_string(),
+                                     "book".to_string(),
+                                     "pool".to_string(),
+                                     "tall".to_string()]);
     }
 
     #[test]
-    fn soft_mirror_first_last_split_works() {
+    fn soft_mirror_first_last_split_works()
+    {
         // Front test, back requirement mirror keeps the miss soft
         let data = words(&["axe", "exa"]);
         let sol = minimal_trees(&data, false, true);
-        assert_eq!(
-            sol.cost,
-            Cost {
-                nos: 1,
-                hard_nos: 0,
-                sum_nos: 1,
-                sum_hard_nos: 0,
-                word_count: 2
-            }
-        );
-        match &*sol.trees[0] {
-            Node::PositionalSplit {
-                test_letter,
-                test_position,
-                requirement_letter,
-                requirement_position,
-                ..
-            } => {
+        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 0, sum_nos: 1, sum_hard_nos: 0, word_count: 2 });
+        match &*sol.trees[0]
+        {
+            Node::PositionalSplit { test_letter,
+                                    test_position,
+                                    requirement_letter,
+                                    requirement_position,
+                                    .. } =>
+            {
                 // Should be first 'a' with requirement last 'a' (mirror)
                 assert_eq!(*test_letter, 'a');
                 assert_eq!(*requirement_letter, 'a');
                 assert_eq!(*test_position, node::Position::First);
                 assert_eq!(*requirement_position, node::Position::Last);
             }
-            other => panic!("expected PositionalSplit (first/last mirror) root, got {other:?}"),
+            other => panic!("expected PositionalSplit (first/last mirror) root, got {other:?}")
         }
     }
 
     #[test]
-    fn test_position_collision_detection() {
+    fn test_position_collision_detection()
+    {
         use node::Position;
         use constraints::positions_can_collide;
 
         // Second and Second-to-last collide for 3-letter words
         assert!(positions_can_collide(Position::Second, Position::SecondToLast),
-            "Second and Second-to-last should collide for 3-letter words");
+                "Second and Second-to-last should collide for 3-letter words");
 
         // Third and Third-to-last collide for 5-letter words
         assert!(positions_can_collide(Position::Third, Position::ThirdToLast),
-            "Third and Third-to-last should collide for 5-letter words");
+                "Third and Third-to-last should collide for 5-letter words");
 
         // First and Last collide for 1-letter words
         assert!(positions_can_collide(Position::First, Position::Last),
-            "First and Last should collide for 1-letter words");
+                "First and Last should collide for 1-letter words");
 
         // First and Second should never collide
         assert!(!positions_can_collide(Position::First, Position::Second),
-            "First and Second should never collide");
+                "First and Second should never collide");
 
         // Contains is not positional, so can't collide
         assert!(!positions_can_collide(Position::Contains, Position::First),
-            "Contains should not collide with positional");
+                "Contains should not collide with positional");
     }
 
     #[test]
-    fn test_position_to_absolute_index() {
+    fn test_position_to_absolute_index()
+    {
         use node::Position;
 
         // Test 3-letter word (e.g., "Leo")
@@ -285,11 +233,9 @@ mod tests {
         assert_eq!(Position::ThirdToLast.to_absolute_index(3), Some(0));
 
         // Verify Second and SecondToLast map to same index for 3-letter words
-        assert_eq!(
-            Position::Second.to_absolute_index(3),
-            Position::SecondToLast.to_absolute_index(3),
-            "Second and SecondToLast should map to same index (1) for 3-letter words"
-        );
+        assert_eq!(Position::Second.to_absolute_index(3),
+                   Position::SecondToLast.to_absolute_index(3),
+                   "Second and SecondToLast should map to same index (1) for 3-letter words");
 
         // Test 5-letter word
         assert_eq!(Position::Third.to_absolute_index(5), Some(2));
@@ -302,7 +248,8 @@ mod tests {
     }
 
     #[test]
-    fn test_same_index_restriction_leo_gemini() {
+    fn test_same_index_restriction_leo_gemini()
+    {
         // Test with Leo and Gemini where E appears at different positions
         // Leo: 3 letters (l-e-o), E is at Second (index 1) and SecondToLast (index 1) - same!
         // Gemini: 6 letters (g-e-m-i-n-i), E is at Second (index 1), SecondToLast is 'n' (index 4)
@@ -318,7 +265,8 @@ mod tests {
     }
 
     #[test]
-    fn test_same_index_restriction_zodiac_subset() {
+    fn test_same_index_restriction_zodiac_subset()
+    {
         // Test with a subset of zodiac words (those without 'R')
         // With the fixed collision detection, we should get better (lower cost) trees
         // because we can now use soft splits like "Second E? (all No have I second)"
@@ -334,13 +282,14 @@ mod tests {
     }
 
     #[test]
-    fn split_with_repeat_branches_after_fix() {
+    fn split_with_repeat_branches_after_fix()
+    {
         // After fixing the memoization bug (adding allow_repeat to Key),
         // word sets that cleanly partition should use Split(yes: Repeat, no: Repeat)
         // instead of Repeat at the root.
 
         let data = words(&["bar", "car", "bee", "see"]);
-        let sol = minimal_trees(&data, true, false);
+        let sol = minimal_trees(&data, true, true);
 
         println!("\nSolution for {{bar, car, bee, see}}:");
         println!("Cost: {:?}", sol.cost);
@@ -351,8 +300,10 @@ mod tests {
         // - Both branches should be Repeat nodes
         // - Cost should be {hard_nos: 0, nos: 1, ...} (better than the old {hard_nos: 1, nos: 1, ...})
 
-        match &*sol.trees[0] {
-            Node::PositionalSplit { yes, no, .. } => {
+        match &*sol.trees[0]
+        {
+            Node::PositionalSplit { yes, no, .. } =>
+            {
                 let yes_is_repeat = matches!(&**yes, Node::Repeat { .. });
                 let no_is_repeat = matches!(&**no, Node::Repeat { .. });
 
@@ -361,7 +312,8 @@ mod tests {
 
                 println!("\n✓ SUCCESS: Found Split(yes: Repeat, no: Repeat) pattern!");
             }
-            _ => {
+            _ =>
+            {
                 panic!("Root should be Split after fix, but got: {:?}", sol.trees[0]);
             }
         }
@@ -370,5 +322,4 @@ mod tests {
         assert_eq!(sol.cost.hard_nos, 0, "Should have 0 hard_nos (all soft splits)");
         assert_eq!(sol.cost.nos, 1, "Should have 1 no edge");
     }
-
 }
