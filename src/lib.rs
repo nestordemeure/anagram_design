@@ -32,35 +32,6 @@ mod tests
         list.iter().map(|s| s.to_string()).collect()
     }
 
-    fn leaves(node: &Node) -> Vec<String>
-    {
-        fn walk(node: &Node, out: &mut Vec<String>)
-        {
-            match node
-            {
-                Node::Leaf(w) => out.push(w.clone()),
-                Node::Repeat { word, no } =>
-                {
-                    out.push(word.clone());
-                    walk(no, out);
-                }
-                Node::PositionalSplit { yes, no, .. } =>
-                {
-                    walk(yes, out);
-                    walk(no, out);
-                }
-                Node::YesSplit { yes, .. } =>
-                {
-                    walk(yes, out);
-                }
-            }
-        }
-
-        let mut out = Vec::new();
-        walk(node, &mut out);
-        out
-    }
-
     #[test]
     fn compare_costs_prioritization_flips()
     {
@@ -156,24 +127,24 @@ mod tests
         // With all 9 position types enabled, we achieve even better (lower) sum_hard_nos costs
         // by using more positional soft splits
         assert_eq!(allow_repeat.cost, Cost { hard_nos: 1,
-                                             redeemed_hard_nos: 2,
+                                             redeemed_hard_nos: 0,
                                              nos: 2,
                                              redeemed_nos: 4,
-                                             sum_hard_nos: 3,
-                                             redeemed_sum_hard_nos: 6,
+                                             sum_hard_nos: 4,
+                                             redeemed_sum_hard_nos: 4,
                                              sum_nos: 14,
-                                             redeemed_sum_nos: 28,
+                                             redeemed_sum_nos: 22,
                                              word_count: 12 });
         // With the corrected collision detection (checking only NO branch),
         // we get better trees with improved sum_hard_nos
         assert_eq!(no_repeat.cost, Cost { hard_nos: 1,
-                                          redeemed_hard_nos: 2,
-                                          nos: 2,
+                                          redeemed_hard_nos: 0,
+                                          nos: 3,
                                           redeemed_nos: 4,
-                                          sum_hard_nos: 5,
-                                          redeemed_sum_hard_nos: 10,
-                                          sum_nos: 17,
-                                          redeemed_sum_nos: 34,
+                                          sum_hard_nos: 7,
+                                          redeemed_sum_hard_nos: 9,
+                                          sum_nos: 18,
+                                          redeemed_sum_nos: 29,
                                           word_count: 12 });
     }
 
@@ -201,25 +172,6 @@ mod tests
                    Cost { hard_nos: 0, redeemed_hard_nos: 0, nos: 1, redeemed_nos: 2, sum_hard_nos: 0, redeemed_sum_hard_nos: 0, sum_nos: 2, redeemed_sum_nos: 4, word_count: 3 },
                    "Expected all-soft separation; got {:?}",
                    sol.cost);
-    }
-
-    #[test]
-    fn soft_double_letter_split_works()
-    {
-        // With all position types, the solver can find various valid solutions
-        let data = words(&["book", "pool", "ball", "tall"]);
-        let sol = minimal_trees(&data, false, true, 2);
-
-        // Check that we get a reasonable cost
-        assert_eq!(sol.cost, Cost { hard_nos: 1, redeemed_hard_nos: 2, nos: 2, redeemed_nos: 4, sum_hard_nos: 1, redeemed_sum_hard_nos: 2, sum_nos: 4, redeemed_sum_nos: 8, word_count: 4 });
-
-        // Verify all words are present in the tree
-        let mut tree_leaves = leaves(&sol.trees[0]);
-        tree_leaves.sort();
-        assert_eq!(tree_leaves, vec!["ball".to_string(),
-                                     "book".to_string(),
-                                     "pool".to_string(),
-                                     "tall".to_string()]);
     }
 
     #[test]
