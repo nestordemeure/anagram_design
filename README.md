@@ -141,8 +141,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 
 ## TODO
 
-* try a sum_yes instead of sum no / hard no
-
 * redeeming yes
   * introduce redeeming hits to UI / solver
   * introcue redeeming_costs, unsigned integers, scaled by redeeming hits, take priority to their non redeemed equivalent
