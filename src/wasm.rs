@@ -64,6 +64,7 @@ pub fn solve_words(
     words: JsValue,
     allow_repeat: bool,
     prioritize_soft_no: bool,
+    redeeming_yes: u32,
 ) -> Result<JsValue, JsValue> {
     let words_vec = words_from_js(words)?;
     if words_vec.is_empty() {
@@ -73,7 +74,7 @@ pub fn solve_words(
         return Err(JsValue::from_str("Solver supports up to 32 words."));
     }
 
-    let sol = minimal_trees(&words_vec, allow_repeat, prioritize_soft_no);
+    let sol = minimal_trees(&words_vec, allow_repeat, prioritize_soft_no, redeeming_yes);
     to_value(&summary_from_solution(&sol))
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
 }

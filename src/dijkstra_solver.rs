@@ -244,6 +244,7 @@ pub(crate) fn solve(
     ctx: &Context<'_>,
     allow_repeat: bool,
     prioritize_soft_no: bool,
+    redeeming_yes: u32,
     constraints: Constraints,
     memo: &mut HashMap<Key, Solution>,
 ) -> Solution {
@@ -341,6 +342,7 @@ pub(crate) fn solve(
                 ctx,
                 false,
                 prioritize_soft_no,
+                redeeming_yes,
                 repeat_constraints,
                 memo,
             );
@@ -428,7 +430,7 @@ pub(crate) fn solve(
         );
 
         // Solve children recursively
-        let no_sol = solve(spec.no, ctx, allow_repeat, prioritize_soft_no, no_constraints, memo);
+        let no_sol = solve(spec.no, ctx, allow_repeat, prioritize_soft_no, redeeming_yes, no_constraints, memo);
 
         if no_sol.is_unsolvable() {
             continue;
@@ -456,7 +458,7 @@ pub(crate) fn solve(
             }
         }
 
-        let yes_sol = solve(spec.yes, ctx, allow_repeat, prioritize_soft_no, yes_constraints, memo);
+        let yes_sol = solve(spec.yes, ctx, allow_repeat, prioritize_soft_no, redeeming_yes, yes_constraints, memo);
 
         if yes_sol.is_unsolvable() {
             continue;

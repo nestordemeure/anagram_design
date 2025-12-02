@@ -170,10 +170,11 @@ function takeFromExternrefTable0(idx) {
  * @param {any} words
  * @param {boolean} allow_repeat
  * @param {boolean} prioritize_soft_no
+ * @param {number} redeeming_yes
  * @returns {any}
  */
-export function solve_words(words, allow_repeat, prioritize_soft_no) {
-    const ret = wasm.solve_words(words, allow_repeat, prioritize_soft_no);
+export function solve_words(words, allow_repeat, prioritize_soft_no, redeeming_yes) {
+    const ret = wasm.solve_words(words, allow_repeat, prioritize_soft_no, redeeming_yes);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }

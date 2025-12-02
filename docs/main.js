@@ -3,6 +3,7 @@ import init, { solve_words, zodiac_words } from "./pkg/anagram_design.js";
 const wordsField = document.querySelector("#words");
 const allowRepeatField = document.querySelector("#allow-repeat");
 const prioritizeSoftField = document.querySelector("#prioritize-soft");
+const redeemingYesField = document.querySelector("#redeeming-yes");
 const statusEl = document.querySelector("#status");
 const summaryEl = document.querySelector("#summary");
 const treesEl = document.querySelector("#trees");
@@ -439,10 +440,12 @@ async function runSolver(event) {
 
   try {
     setStatus("Generating…");
+    const redeemingYes = parseInt(redeemingYesField.value, 10);
     const result = solve_words(
       words,
       allowRepeatField.checked,
-      prioritizeSoftField.checked
+      prioritizeSoftField.checked,
+      redeemingYes
     );
     renderResult(result);
     setStatus("");

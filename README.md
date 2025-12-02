@@ -142,7 +142,6 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 ## TODO
 
 * redeeming yes
-  * introduce redeeming hits to UI / solver
   * introcue redeeming_costs, unsigned integers, scaled by redeeming hits, take priority to their non redeemed equivalent
   * introduce redeeming splits, they have negative redeemed costs
   * gave solver an exhaustive redeeming split adder

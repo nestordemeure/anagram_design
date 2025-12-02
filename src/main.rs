@@ -24,7 +24,7 @@ fn print_solutions(allow_repeat: bool, prioritize_soft_no: bool) {
     let words = zodiac_words();
     let word_count = words.len() as u32;
     const DISPLAY: usize = 5;
-    let result = minimal_trees(&words, allow_repeat, prioritize_soft_no);
+    let result = minimal_trees(&words, allow_repeat, prioritize_soft_no, 2);
     let preview = DISPLAY.min(result.trees.len());
     let avg_sum_hard = result.cost.sum_hard_nos as f32 / word_count as f32;
     let avg_sum = result.cost.sum_nos as f32 / word_count as f32;

@@ -74,8 +74,8 @@ mod tests
     {
         use std::cmp::Ordering;
         let data = words(&["alpha", "beta"]);
-        let with_repeat = minimal_trees(&data, true, true);
-        let without_repeat = minimal_trees(&data, false, true);
+        let with_repeat = minimal_trees(&data, true, true, 2);
+        let without_repeat = minimal_trees(&data, false, true, 2);
         assert_eq!(compare_costs(&with_repeat.cost, &without_repeat.cost, true), Ordering::Less);
         assert!(matches!(&*with_repeat.trees[0], Node::Repeat { .. }));
     }
@@ -84,14 +84,15 @@ mod tests
     fn simple_split_cost()
     {
         let data = words(&["ab", "ac", "b"]);
-        let sol = minimal_trees(&data, false, true);
+        let sol = minimal_trees(&data, false, true, 2);
         // Improved cost with better exception handling
         assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 1, word_count: 3 });
     }
 
     #[test]
-    fn zodiac_costs()
+    fn zodiac_costs_baseline()
     {
+        // Baseline test with redeeming_yes=0 to ensure behavior stays fixed
         let data = words(&["aries",
                            "taurus",
                            "gemini",
@@ -104,8 +105,42 @@ mod tests
                            "capricorn",
                            "aquarius",
                            "pisces"]);
-        let allow_repeat = minimal_trees(&data, true, true);
-        let no_repeat = minimal_trees(&data, false, true);
+        let allow_repeat = minimal_trees(&data, true, true, 0);
+        let no_repeat = minimal_trees(&data, false, true, 0);
+        // With all 9 position types enabled, we achieve even better (lower) sum_hard_nos costs
+        // by using more positional soft splits
+        assert_eq!(allow_repeat.cost, Cost { nos: 2,
+                                             hard_nos: 1,
+                                             sum_nos: 14,
+                                             sum_hard_nos: 3,
+                                             word_count: 12 });
+        // With the corrected collision detection (checking only NO branch),
+        // we get better trees with improved sum_hard_nos
+        assert_eq!(no_repeat.cost, Cost { nos: 2,
+                                          hard_nos: 1,
+                                          sum_nos: 17,
+                                          sum_hard_nos: 5,
+                                          word_count: 12 });
+    }
+
+    #[test]
+    fn zodiac_costs()
+    {
+        // Test with redeeming_yes=2 (default)
+        let data = words(&["aries",
+                           "taurus",
+                           "gemini",
+                           "cancer",
+                           "leo",
+                           "virgo",
+                           "libra",
+                           "scorpio",
+                           "sagittarius",
+                           "capricorn",
+                           "aquarius",
+                           "pisces"]);
+        let allow_repeat = minimal_trees(&data, true, true, 2);
+        let no_repeat = minimal_trees(&data, false, true, 2);
         // With all 9 position types enabled, we achieve even better (lower) sum_hard_nos costs
         // by using more positional soft splits
         assert_eq!(allow_repeat.cost, Cost { nos: 2,
@@ -131,7 +166,7 @@ mod tests
         //   scorpio: has {s,c,o,r,p,i} - has 'r' and 'c', no 'g'
         //   gemini: has {g,e,m,i,n} - has 'e' and 'g', no 'r' or 'c'
         let data = words(&["virgo", "scorpio", "gemini"]);
-        let sol = minimal_trees(&data, true, true);
+        let sol = minimal_trees(&data, true, true, 2);
         // Should achieve hard_nos: 0 using: r/e soft, then c/g soft
         assert_eq!(sol.cost.hard_nos, 0, "Expected 0 hard NOs (all soft), got {}", sol.cost.hard_nos);
     }
@@ -141,7 +176,7 @@ mod tests
     {
         // With improved exception handling, we can now achieve all-soft separation
         let data = words(&["tr", "r", "e"]);
-        let sol = minimal_trees(&data, false, true);
+        let sol = minimal_trees(&data, false, true, 2);
         assert_eq!(sol.cost,
                    Cost { hard_nos: 0, nos: 1, sum_hard_nos: 0, sum_nos: 2, word_count: 3 },
                    "Expected all-soft separation; got {:?}",
@@ -153,7 +188,7 @@ mod tests
     {
         // With all position types, the solver can find various valid solutions
         let data = words(&["book", "pool", "ball", "tall"]);
-        let sol = minimal_trees(&data, false, true);
+        let sol = minimal_trees(&data, false, true, 2);
 
         // Check that we get a reasonable cost
         assert_eq!(sol.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 4, sum_hard_nos: 1, word_count: 4 });
@@ -172,7 +207,7 @@ mod tests
     {
         // Front test, back requirement mirror keeps the miss soft
         let data = words(&["axe", "exa"]);
-        let sol = minimal_trees(&data, false, true);
+        let sol = minimal_trees(&data, false, true, 2);
         assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 0, sum_nos: 1, sum_hard_nos: 0, word_count: 2 });
         match &*sol.trees[0]
         {
@@ -257,7 +292,7 @@ mod tests
         // it CAN use "SecondToLast E?" because in that context, only words where the positions
         // don't collide are relevant for the NO branch requirement.
         let data = words(&["leo", "gemini"]);
-        let sol = minimal_trees(&data, false, true);
+        let sol = minimal_trees(&data, false, true, 2);
 
         // Just verify we get a valid solution
         assert!(!sol.is_unsolvable());
@@ -272,7 +307,7 @@ mod tests
         // because we can now use soft splits like "Second E? (all No have I second)"
         // even when Leo is in the YES branch (collision doesn't matter there).
         let data = words(&["leo", "gemini", "pisces"]);
-        let sol = minimal_trees(&data, false, true);
+        let sol = minimal_trees(&data, false, true, 2);
 
         // Just verify we get a valid solution with reasonable cost
         assert!(!sol.is_unsolvable());
@@ -289,7 +324,7 @@ mod tests
         // instead of Repeat at the root.
 
         let data = words(&["bar", "car", "bee", "see"]);
-        let sol = minimal_trees(&data, true, true);
+        let sol = minimal_trees(&data, true, true, 2);
 
         println!("\nSolution for {{bar, car, bee, see}}:");
         println!("Cost: {:?}", sol.cost);
