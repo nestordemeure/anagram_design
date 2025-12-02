@@ -85,6 +85,7 @@ pub fn estimate_cost(mask: Mask, allow_repeat: bool, redeeming_yes: u32) -> Cost
     let nos_estimate = if count >= threshold { 1 } else { 0 };
     let sum_nos_estimate = count.saturating_sub(1);
 
+    // the `nos_estimate * redeeming_yes` redemed costs are actualy pessimistic, but necessary to avoid paths explosions
     Cost { hard_nos: 0, // Optimistic: all soft
            redeemed_hard_nos: 0,
            nos: nos_estimate,
