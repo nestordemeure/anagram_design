@@ -516,11 +516,33 @@ pub(crate) fn solve(mask: Mask,
         }
 
         // Pruning: check if no branch cost already exceeds best
+        // Account for potential YesSplits that could reduce cost
         if let Some(ref current_best) = best_cost
         {
-            let no_cost = add_no_edge(&no_sol.cost, spec.is_hard, redeeming_yes as i32);
+            let mut no_cost = add_no_edge(&no_sol.cost, spec.is_hard, redeeming_yes as i32);
 
-            // Use compare_costs to check if this no branch is already worse than best
+            // Optimistically assume we can add up to redeeming_yes YesSplits
+            let no_word_count = mask_count(spec.no);
+            let min_words_for_yes_split = if allow_repeat { 3 } else { 2 };
+
+            let max_yes_splits = if redeeming_yes > 0 && no_word_count >= min_words_for_yes_split {
+                redeeming_yes
+            } else {
+                0
+            };
+
+            // Apply maximum possible YesSplits (reduces redeemed costs)
+            for _ in 0..max_yes_splits {
+                no_cost = add_yes_split(&no_cost);
+            }
+
+            // Cap redeemed costs to not be negative
+            no_cost.redeemed_hard_nos = no_cost.redeemed_hard_nos.max(0);
+            no_cost.redeemed_nos = no_cost.redeemed_nos.max(0);
+            no_cost.redeemed_sum_hard_nos = no_cost.redeemed_sum_hard_nos.max(0);
+            no_cost.redeemed_sum_nos = no_cost.redeemed_sum_nos.max(0);
+
+            // Use compare_costs to check if even with max YesSplits, this no branch is worse than best
             if compare_costs(&no_cost, current_best, prioritize_soft_no) == Ordering::Greater
             {
                 continue;
