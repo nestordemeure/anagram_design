@@ -55,9 +55,12 @@ struct SplitSpec
 
 /// Find all valid YesSplits for a mask.
 /// YesSplits are hard splits that are true for ALL words in the mask.
+/// parent_hard_split: If Some((idx, pos)), the parent is a hard split and we should
+/// avoid yes splits that would be equivalent to a soft split (parent_primary, yes_split_question).
 fn find_valid_yes_splits(mask: Mask,
                          ctx: &Context<'_>,
-                         constraints: &Constraints)
+                         constraints: &Constraints,
+                         parent_hard_split: Option<(usize, Position)>)
                          -> Vec<(Position, usize, char)>
 {
     let mut valid_yes_splits = Vec::new();
@@ -85,6 +88,18 @@ fn find_valid_yes_splits(mask: Mask,
                 // Check if this split is allowed by constraints (like hard splits)
                 if split_allowed(constraints, idx, idx, *position)
                 {
+                    // Check if this yes split would be redundant with a soft split
+                    // (only for immediate children of hard splits on the no-branch)
+                    if let Some((parent_idx, parent_pos)) = parent_hard_split
+                    {
+                        use crate::constraints::would_form_soft_split;
+                        if would_form_soft_split(parent_idx, parent_pos, idx, *position)
+                        {
+                            // Skip this yes split - it's redundant with the soft split
+                            continue;
+                        }
+                    }
+
                     let letter = (b'a' + idx as u8) as char;
                     valid_yes_splits.push((*position, idx, letter));
                 }
@@ -98,12 +113,14 @@ fn find_valid_yes_splits(mask: Mask,
 /// Generate all YesSplit chains wrapping a base node.
 /// Returns tuples of (augmented_node, cost_delta) where cost_delta is the number of YesSplits added.
 /// parent_exclusions: (position, letter_idx) pairs from parent split to exclude from YesSplit chains.
+/// parent_hard_split: If Some((idx, pos)), filter out yes splits that would be equivalent to soft splits.
 fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
                                              mask: Mask,
                                              ctx: &Context<'_>,
                                              constraints: &Constraints,
                                              max_chain_length: u32,
-                                             parent_exclusions: &[(Position, usize)])
+                                             parent_exclusions: &[(Position, usize)],
+                                             parent_hard_split: Option<(usize, Position)>)
                                              -> Vec<(NodeRef, u32)>
 {
     let mut results = Vec::new();
@@ -124,7 +141,8 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
                     constraints: Constraints,
                     used_pairs: &UsedPairs,
                     depth: ChainDepth,
-                    results: &mut Vec<(NodeRef, u32)>)
+                    results: &mut Vec<(NodeRef, u32)>,
+                    parent_hard_split: Option<(usize, Position)>)
     {
         if depth.remaining == 0
         {
@@ -132,7 +150,9 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
         }
 
         // Find valid YesSplits at this level
-        let valid_splits = find_valid_yes_splits(mask, ctx, &constraints);
+        // Only pass parent_hard_split for immediate children (depth.current == 0)
+        let parent_hard_split_filter = if depth.current == 0 { parent_hard_split } else { None };
+        let valid_splits = find_valid_yes_splits(mask, ctx, &constraints, parent_hard_split_filter);
 
         for (position, idx, letter) in valid_splits
         {
@@ -174,7 +194,8 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
                          next_constraints,
                          &next_used_pairs,
                          ChainDepth { remaining: depth.remaining - 1, current: depth.current + 1 },
-                         results);
+                         results,
+                         parent_hard_split);
         }
     }
 
@@ -191,7 +212,8 @@ fn generate_yes_split_chains_with_exclusions(base_node: &NodeRef,
                  *constraints,
                  &used_pairs,
                  ChainDepth { remaining: max_chain_length, current: 0 },
-                 &mut results);
+                 &mut results,
+                 parent_hard_split);
 
     results
 }
@@ -738,12 +760,21 @@ pub(crate) fn solve(mask: Mask,
                 let parent_pairs =
                     vec![(spec.test_position, spec.test_idx), (spec.req_position, spec.req_idx),];
 
+                // If parent is a hard split, pass info to avoid redundant yes splits
+                // that would be equivalent to soft splits
+                let parent_hard_split = if spec.is_hard {
+                    Some((spec.test_idx, spec.test_position))
+                } else {
+                    None
+                };
+
                 let augmented_trees = generate_yes_split_chains_with_exclusions(n,
                                                                                 spec.no,
                                                                                 ctx,
                                                                                 &no_constraints,
                                                                                 redeeming_yes,
-                                                                                &parent_pairs);
+                                                                                &parent_pairs,
+                                                                                parent_hard_split);
 
                 for (augmented_node, yes_split_count) in augmented_trees
                 {

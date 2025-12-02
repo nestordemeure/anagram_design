@@ -157,4 +157,3 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 ## TODO
 
 * fix constraint violation: constraints are not propagated down from yessplits
-* do not allow a yes split where an identical softno exists

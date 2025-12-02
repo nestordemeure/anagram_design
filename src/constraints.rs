@@ -423,6 +423,50 @@ pub fn get_reciprocal(letter_idx: usize) -> Option<usize> {
     None
 }
 
+/// Check if two (letter, position) pairs would form a valid soft split.
+/// This is used to avoid redundant yes splits that are equivalent to soft splits.
+pub fn would_form_soft_split(
+    primary_idx: usize,
+    primary_pos: Position,
+    secondary_idx: usize,
+    secondary_pos: Position,
+) -> bool {
+    // 1. Check if they form a reciprocal pair at the same position
+    if primary_pos == secondary_pos {
+        if let Some(reciprocal_idx) = get_reciprocal(primary_idx) {
+            if reciprocal_idx == secondary_idx {
+                return true;
+            }
+        }
+    }
+
+    // 2. Check if they're the same letter at adjacent/mirror positions
+    if primary_idx == secondary_idx {
+        let valid_pairs: Vec<(Position, Position)> = match primary_pos {
+            Position::First => vec![(Position::First, Position::Second), (Position::First, Position::Last)],
+            Position::Second => vec![(Position::Second, Position::First), (Position::Second, Position::Third), (Position::Second, Position::SecondToLast)],
+            Position::Third => vec![(Position::Third, Position::Second), (Position::Third, Position::ThirdToLast)],
+            Position::ThirdToLast => vec![(Position::ThirdToLast, Position::Third), (Position::ThirdToLast, Position::SecondToLast)],
+            Position::SecondToLast => vec![(Position::SecondToLast, Position::Second), (Position::SecondToLast, Position::ThirdToLast), (Position::SecondToLast, Position::Last)],
+            Position::Last => vec![(Position::Last, Position::First), (Position::Last, Position::SecondToLast)],
+            _ => vec![],
+        };
+
+        for (pos1, pos2) in valid_pairs {
+            if (primary_pos == pos1 && secondary_pos == pos2) || (primary_pos == pos2 && secondary_pos == pos1) {
+                return true;
+            }
+        }
+    }
+
+    // 3. Check if they're different letters at Double or Triple position
+    if matches!(primary_pos, Position::Double | Position::Triple) && primary_pos == secondary_pos && primary_idx != secondary_idx {
+        return true;
+    }
+
+    false
+}
+
 pub const fn branch_constraints(
     constraints: &Constraints,
     primary_idx: usize,
