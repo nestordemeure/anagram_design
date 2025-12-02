@@ -89,10 +89,14 @@ impl Solution {
     pub const fn unsolvable(word_count: u32) -> Self {
         Solution {
             cost: Cost {
-                nos: u32::MAX,
                 hard_nos: u32::MAX,
-                sum_nos: u32::MAX,
+                redeemed_hard_nos: i32::MAX,
+                nos: u32::MAX,
+                redeemed_nos: i32::MAX,
                 sum_hard_nos: u32::MAX,
+                redeemed_sum_hard_nos: i32::MAX,
+                sum_nos: u32::MAX,
+                redeemed_sum_nos: i32::MAX,
                 word_count,
             },
             trees: Vec::new(),

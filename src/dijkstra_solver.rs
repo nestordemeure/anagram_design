@@ -40,15 +40,19 @@ const fn get_position_masks<'a>(ctx: &'a Context<'a>, position: Position) -> &'a
 
 /// Estimate lower bound cost for a state (used for candidate ordering)
 /// This provides an optimistic (lower) bound that guarantees we won't prune optimal solutions
-fn estimate_cost(mask: Mask, _constraints: &Constraints, _ctx: &Context<'_>, allow_repeat: bool) -> Cost {
+fn estimate_cost(mask: Mask, _constraints: &Constraints, _ctx: &Context<'_>, allow_repeat: bool, redeeming_yes: u32) -> Cost {
     let count = mask_count(mask);
 
     if count == 1 {
         return Cost {
-            nos: 0,
             hard_nos: 0,
-            sum_nos: 0,
+            redeemed_hard_nos: 0,
+            nos: 0,
+            redeemed_nos: 0,
             sum_hard_nos: 0,
+            redeemed_sum_hard_nos: 0,
+            sum_nos: 0,
+            redeemed_sum_nos: 0,
             word_count: 1,
         };
     }
@@ -61,12 +65,18 @@ fn estimate_cost(mask: Mask, _constraints: &Constraints, _ctx: &Context<'_>, all
     // - sum_nos: N-1 (balanced tree has N-1 internal nodes, each adds ≥1)
     // - sum_hard_nos: 0 (optimistic: assume all soft)
     let threshold = if allow_repeat { 3 } else { 2 };
+    let nos_estimate = if count >= threshold { 1 } else { 0 };
+    let sum_nos_estimate = count.saturating_sub(1);
 
     Cost {
-        nos: if count >= threshold { 1 } else { 0 },  // Depends on allow_repeat
         hard_nos: 0,                                   // Optimistic: all soft
-        sum_nos: count.saturating_sub(1),              // N-1 (balanced tree internal nodes)
+        redeemed_hard_nos: 0,
+        nos: nos_estimate,
+        redeemed_nos: (nos_estimate * redeeming_yes) as i32,
         sum_hard_nos: 0,                               // Optimistic: all soft
+        redeemed_sum_hard_nos: 0,
+        sum_nos: sum_nos_estimate,
+        redeemed_sum_nos: (sum_nos_estimate * redeeming_yes) as i32,
         word_count: count,
     }
 }
@@ -263,10 +273,14 @@ pub(crate) fn solve(
         let word = single_word_from_mask(mask, ctx.words).expect("mask must map to a word");
         let sol = Solution {
             cost: Cost {
-                nos: 0,
                 hard_nos: 0,
-                sum_nos: 0,
+                redeemed_hard_nos: 0,
+                nos: 0,
+                redeemed_nos: 0,
                 sum_hard_nos: 0,
+                redeemed_sum_hard_nos: 0,
+                sum_nos: 0,
+                redeemed_sum_nos: 0,
                 word_count: 1,
             },
             trees: vec![Rc::new(Node::Leaf(word))],
@@ -294,22 +308,43 @@ pub(crate) fn solve(
 
         for spec in splits {
             // Estimate the cost of this split
-            let est_yes = estimate_cost(spec.yes, &constraints, ctx, allow_repeat);
-            let est_no = estimate_cost(spec.no, &constraints, ctx, allow_repeat);
+            let est_yes = estimate_cost(spec.yes, &constraints, ctx, allow_repeat, redeeming_yes);
+            let est_no = estimate_cost(spec.no, &constraints, ctx, allow_repeat, redeeming_yes);
+
+            let hard_nos = if spec.is_hard {
+                est_yes.hard_nos.max(est_no.hard_nos + 1)
+            } else {
+                est_yes.hard_nos.max(est_no.hard_nos)
+            };
+            let redeemed_hard_nos = if spec.is_hard {
+                est_yes.redeemed_hard_nos.max(est_no.redeemed_hard_nos + redeeming_yes as i32)
+            } else {
+                est_yes.redeemed_hard_nos.max(est_no.redeemed_hard_nos)
+            };
+            let nos = est_yes.nos.max(est_no.nos + 1);
+            let redeemed_nos = est_yes.redeemed_nos.max(est_no.redeemed_nos + redeeming_yes as i32);
+            let sum_hard_nos = if spec.is_hard {
+                est_yes.sum_hard_nos + est_no.sum_hard_nos + est_no.word_count
+            } else {
+                est_yes.sum_hard_nos + est_no.sum_hard_nos
+            };
+            let redeemed_sum_hard_nos = if spec.is_hard {
+                est_yes.redeemed_sum_hard_nos + est_no.redeemed_sum_hard_nos + (est_no.word_count as i32 * redeeming_yes as i32)
+            } else {
+                est_yes.redeemed_sum_hard_nos + est_no.redeemed_sum_hard_nos
+            };
+            let sum_nos = est_yes.sum_nos + est_no.sum_nos + est_no.word_count;
+            let redeemed_sum_nos = est_yes.redeemed_sum_nos + est_no.redeemed_sum_nos + (est_no.word_count as i32 * redeeming_yes as i32);
 
             let est_cost = Cost {
-                nos: est_yes.nos.max(est_no.nos + 1),
-                hard_nos: if spec.is_hard {
-                    est_yes.hard_nos.max(est_no.hard_nos + 1)
-                } else {
-                    est_yes.hard_nos.max(est_no.hard_nos)
-                },
-                sum_nos: est_yes.sum_nos + est_no.sum_nos + est_no.word_count,
-                sum_hard_nos: if spec.is_hard {
-                    est_yes.sum_hard_nos + est_no.sum_hard_nos + est_no.word_count
-                } else {
-                    est_yes.sum_hard_nos + est_no.sum_hard_nos
-                },
+                hard_nos,
+                redeemed_hard_nos,
+                nos,
+                redeemed_nos,
+                sum_hard_nos,
+                redeemed_sum_hard_nos,
+                sum_nos,
+                redeemed_sum_nos,
                 word_count: est_yes.word_count + est_no.word_count,
             };
 
@@ -352,18 +387,26 @@ pub(crate) fn solve(
             }
 
             let yes_cost = Cost {
-                nos: 0,
                 hard_nos: 0,
-                sum_nos: 0,
+                redeemed_hard_nos: 0,
+                nos: 0,
+                redeemed_nos: 0,
                 sum_hard_nos: 0,
+                redeemed_sum_hard_nos: 0,
+                sum_nos: 0,
+                redeemed_sum_nos: 0,
                 word_count: 1,
             };
 
             let branch_cost = Cost {
-                nos: no_sol.cost.nos.max(yes_cost.nos),
                 hard_nos: no_sol.cost.hard_nos.max(yes_cost.hard_nos),
-                sum_nos: yes_cost.sum_nos + no_sol.cost.sum_nos,
+                redeemed_hard_nos: no_sol.cost.redeemed_hard_nos.max(yes_cost.redeemed_hard_nos),
+                nos: no_sol.cost.nos.max(yes_cost.nos),
+                redeemed_nos: no_sol.cost.redeemed_nos.max(yes_cost.redeemed_nos),
                 sum_hard_nos: yes_cost.sum_hard_nos + no_sol.cost.sum_hard_nos,
+                redeemed_sum_hard_nos: yes_cost.redeemed_sum_hard_nos + no_sol.cost.redeemed_sum_hard_nos,
+                sum_nos: yes_cost.sum_nos + no_sol.cost.sum_nos,
+                redeemed_sum_nos: yes_cost.redeemed_sum_nos + no_sol.cost.redeemed_sum_nos,
                 word_count: yes_cost.word_count + no_sol.cost.word_count,
             };
 
@@ -468,36 +511,56 @@ pub(crate) fn solve(
         let yes_cost = yes_sol.cost;
         let no_cost = if spec.is_hard {
             Cost {
-                nos: no_sol.cost.nos + 1,
                 hard_nos: no_sol.cost.hard_nos + 1,
-                sum_nos: no_sol.cost.sum_nos,
+                redeemed_hard_nos: no_sol.cost.redeemed_hard_nos + redeeming_yes as i32,
+                nos: no_sol.cost.nos + 1,
+                redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
                 sum_hard_nos: no_sol.cost.sum_hard_nos,
+                redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
+                sum_nos: no_sol.cost.sum_nos,
+                redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
                 word_count: no_sol.cost.word_count,
             }
         } else {
             Cost {
-                nos: no_sol.cost.nos + 1,
                 hard_nos: no_sol.cost.hard_nos,
-                sum_nos: no_sol.cost.sum_nos,
+                redeemed_hard_nos: no_sol.cost.redeemed_hard_nos,
+                nos: no_sol.cost.nos + 1,
+                redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
                 sum_hard_nos: no_sol.cost.sum_hard_nos,
+                redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
+                sum_nos: no_sol.cost.sum_nos,
+                redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
                 word_count: no_sol.cost.word_count,
             }
         };
 
-        let nos = yes_cost.nos.max(no_cost.nos);
         let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
+        let redeemed_hard_nos = yes_cost.redeemed_hard_nos.max(no_cost.redeemed_hard_nos);
+        let nos = yes_cost.nos.max(no_cost.nos);
+        let redeemed_nos = yes_cost.redeemed_nos.max(no_cost.redeemed_nos);
         let total_sum_nos = yes_sol.cost.sum_nos + no_sol.cost.sum_nos + no_sol.cost.word_count;
         let total_sum_hard_nos = if spec.is_hard {
             yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos + no_sol.cost.word_count
         } else {
             yes_sol.cost.sum_hard_nos + no_sol.cost.sum_hard_nos
         };
+        let total_redeemed_sum_nos = yes_sol.cost.redeemed_sum_nos + no_sol.cost.redeemed_sum_nos + (no_sol.cost.word_count as i32 * redeeming_yes as i32);
+        let total_redeemed_sum_hard_nos = if spec.is_hard {
+            yes_sol.cost.redeemed_sum_hard_nos + no_sol.cost.redeemed_sum_hard_nos + (no_sol.cost.word_count as i32 * redeeming_yes as i32)
+        } else {
+            yes_sol.cost.redeemed_sum_hard_nos + no_sol.cost.redeemed_sum_hard_nos
+        };
 
         let branch_cost = Cost {
-            nos,
             hard_nos,
-            sum_nos: total_sum_nos,
+            redeemed_hard_nos,
+            nos,
+            redeemed_nos,
             sum_hard_nos: total_sum_hard_nos,
+            redeemed_sum_hard_nos: total_redeemed_sum_hard_nos,
+            sum_nos: total_sum_nos,
+            redeemed_sum_nos: total_redeemed_sum_nos,
             word_count: yes_sol.cost.word_count + no_sol.cost.word_count,
         };
 

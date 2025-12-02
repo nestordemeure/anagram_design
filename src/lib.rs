@@ -62,8 +62,8 @@ mod tests
     {
         use std::cmp::Ordering;
 
-        let soft_first = Cost { hard_nos: 0, nos: 2, sum_hard_nos: 0, sum_nos: 4, word_count: 4 };
-        let hard_first = Cost { hard_nos: 1, nos: 1, sum_hard_nos: 1, sum_nos: 2, word_count: 4 };
+        let soft_first = Cost { hard_nos: 0, redeemed_hard_nos: 0, nos: 2, redeemed_nos: 4, sum_hard_nos: 0, redeemed_sum_hard_nos: 0, sum_nos: 4, redeemed_sum_nos: 8, word_count: 4 };
+        let hard_first = Cost { hard_nos: 1, redeemed_hard_nos: 2, nos: 1, redeemed_nos: 2, sum_hard_nos: 1, redeemed_sum_hard_nos: 2, sum_nos: 2, redeemed_sum_nos: 4, word_count: 4 };
 
         assert_eq!(compare_costs(&soft_first, &hard_first, true), Ordering::Less);
         assert_eq!(compare_costs(&soft_first, &hard_first, false), Ordering::Greater);
@@ -86,7 +86,7 @@ mod tests
         let data = words(&["ab", "ac", "b"]);
         let sol = minimal_trees(&data, false, true, 2);
         // Improved cost with better exception handling
-        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 1, sum_nos: 2, sum_hard_nos: 1, word_count: 3 });
+        assert_eq!(sol.cost, Cost { hard_nos: 1, redeemed_hard_nos: 2, nos: 1, redeemed_nos: 2, sum_hard_nos: 1, redeemed_sum_hard_nos: 2, sum_nos: 2, redeemed_sum_nos: 4, word_count: 3 });
     }
 
     #[test]
@@ -109,17 +109,25 @@ mod tests
         let no_repeat = minimal_trees(&data, false, true, 0);
         // With all 9 position types enabled, we achieve even better (lower) sum_hard_nos costs
         // by using more positional soft splits
-        assert_eq!(allow_repeat.cost, Cost { nos: 2,
-                                             hard_nos: 1,
-                                             sum_nos: 14,
+        assert_eq!(allow_repeat.cost, Cost { hard_nos: 1,
+                                             redeemed_hard_nos: 0,
+                                             nos: 2,
+                                             redeemed_nos: 0,
                                              sum_hard_nos: 3,
+                                             redeemed_sum_hard_nos: 0,
+                                             sum_nos: 14,
+                                             redeemed_sum_nos: 0,
                                              word_count: 12 });
         // With the corrected collision detection (checking only NO branch),
         // we get better trees with improved sum_hard_nos
-        assert_eq!(no_repeat.cost, Cost { nos: 2,
-                                          hard_nos: 1,
-                                          sum_nos: 17,
+        assert_eq!(no_repeat.cost, Cost { hard_nos: 1,
+                                          redeemed_hard_nos: 0,
+                                          nos: 2,
+                                          redeemed_nos: 0,
                                           sum_hard_nos: 5,
+                                          redeemed_sum_hard_nos: 0,
+                                          sum_nos: 17,
+                                          redeemed_sum_nos: 0,
                                           word_count: 12 });
     }
 
@@ -143,17 +151,25 @@ mod tests
         let no_repeat = minimal_trees(&data, false, true, 2);
         // With all 9 position types enabled, we achieve even better (lower) sum_hard_nos costs
         // by using more positional soft splits
-        assert_eq!(allow_repeat.cost, Cost { nos: 2,
-                                             hard_nos: 1,
-                                             sum_nos: 14,
+        assert_eq!(allow_repeat.cost, Cost { hard_nos: 1,
+                                             redeemed_hard_nos: 2,
+                                             nos: 2,
+                                             redeemed_nos: 4,
                                              sum_hard_nos: 3,
+                                             redeemed_sum_hard_nos: 6,
+                                             sum_nos: 14,
+                                             redeemed_sum_nos: 28,
                                              word_count: 12 });
         // With the corrected collision detection (checking only NO branch),
         // we get better trees with improved sum_hard_nos
-        assert_eq!(no_repeat.cost, Cost { nos: 2,
-                                          hard_nos: 1,
-                                          sum_nos: 17,
+        assert_eq!(no_repeat.cost, Cost { hard_nos: 1,
+                                          redeemed_hard_nos: 2,
+                                          nos: 2,
+                                          redeemed_nos: 4,
                                           sum_hard_nos: 5,
+                                          redeemed_sum_hard_nos: 10,
+                                          sum_nos: 17,
+                                          redeemed_sum_nos: 34,
                                           word_count: 12 });
     }
 
@@ -178,7 +194,7 @@ mod tests
         let data = words(&["tr", "r", "e"]);
         let sol = minimal_trees(&data, false, true, 2);
         assert_eq!(sol.cost,
-                   Cost { hard_nos: 0, nos: 1, sum_hard_nos: 0, sum_nos: 2, word_count: 3 },
+                   Cost { hard_nos: 0, redeemed_hard_nos: 0, nos: 1, redeemed_nos: 2, sum_hard_nos: 0, redeemed_sum_hard_nos: 0, sum_nos: 2, redeemed_sum_nos: 4, word_count: 3 },
                    "Expected all-soft separation; got {:?}",
                    sol.cost);
     }
@@ -191,7 +207,7 @@ mod tests
         let sol = minimal_trees(&data, false, true, 2);
 
         // Check that we get a reasonable cost
-        assert_eq!(sol.cost, Cost { nos: 2, hard_nos: 1, sum_nos: 4, sum_hard_nos: 1, word_count: 4 });
+        assert_eq!(sol.cost, Cost { hard_nos: 1, redeemed_hard_nos: 2, nos: 2, redeemed_nos: 4, sum_hard_nos: 1, redeemed_sum_hard_nos: 2, sum_nos: 4, redeemed_sum_nos: 8, word_count: 4 });
 
         // Verify all words are present in the tree
         let mut tree_leaves = leaves(&sol.trees[0]);
@@ -208,7 +224,7 @@ mod tests
         // Front test, back requirement mirror keeps the miss soft
         let data = words(&["axe", "exa"]);
         let sol = minimal_trees(&data, false, true, 2);
-        assert_eq!(sol.cost, Cost { nos: 1, hard_nos: 0, sum_nos: 1, sum_hard_nos: 0, word_count: 2 });
+        assert_eq!(sol.cost, Cost { hard_nos: 0, redeemed_hard_nos: 0, nos: 1, redeemed_nos: 2, sum_hard_nos: 0, redeemed_sum_hard_nos: 0, sum_nos: 1, redeemed_sum_nos: 2, word_count: 2 });
         match &*sol.trees[0]
         {
             Node::PositionalSplit { test_letter,
