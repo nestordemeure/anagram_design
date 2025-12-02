@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use crate::context::{Mask, mask_count};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cost
@@ -21,6 +22,63 @@ pub struct Cost
     pub redeemed_sum_nos: i32,
     /// Number of words in this subtree.
     pub word_count: u32
+}
+
+/// Increment a cost by adding a no-edge.
+/// Used when traversing the no branch of a split.
+pub fn add_no_edge(base: &Cost, is_hard: bool, redeeming_yes: i32) -> Cost
+{
+    if is_hard
+    {
+        Cost { hard_nos: base.hard_nos + 1,
+               redeemed_hard_nos: base.redeemed_hard_nos + redeeming_yes,
+               nos: base.nos + 1,
+               redeemed_nos: base.redeemed_nos + redeeming_yes,
+               sum_hard_nos: base.sum_hard_nos,
+               redeemed_sum_hard_nos: base.redeemed_sum_hard_nos,
+               sum_nos: base.sum_nos,
+               redeemed_sum_nos: base.redeemed_sum_nos,
+               word_count: base.word_count }
+    }
+    else
+    {
+        Cost { hard_nos: base.hard_nos,
+               redeemed_hard_nos: base.redeemed_hard_nos,
+               nos: base.nos + 1,
+               redeemed_nos: base.redeemed_nos + redeeming_yes,
+               sum_hard_nos: base.sum_hard_nos,
+               redeemed_sum_hard_nos: base.redeemed_sum_hard_nos,
+               sum_nos: base.sum_nos,
+               redeemed_sum_nos: base.redeemed_sum_nos,
+               word_count: base.word_count }
+    }
+}
+
+/// Estimate lower bound cost for a state (used for candidate ordering).
+/// This provides an optimistic (lower) bound that guarantees we won't prune optimal solutions.
+pub fn estimate_cost(mask: Mask, allow_repeat: bool, redeeming_yes: u32) -> Cost
+{
+    // Lower bounds:
+    // - nos: 1 if N >= threshold, else 0
+    //   - When allow_repeat=true: threshold is 3 (2 words can be handled with Repeat, nos=0)
+    //   - When allow_repeat=false: threshold is 2 (need at least one split)
+    // - hard_nos: 0 (optimistic: assume all soft splits)
+    // - sum_nos: N-1 (balanced tree has N-1 internal nodes, each adds ≥1)
+    // - sum_hard_nos: 0 (optimistic: assume all soft)
+    let count: u32 = mask_count(mask);
+    let threshold = if allow_repeat { 3 } else { 2 };
+    let nos_estimate = if count >= threshold { 1 } else { 0 };
+    let sum_nos_estimate = count.saturating_sub(1);
+
+    Cost { hard_nos: 0, // Optimistic: all soft
+           redeemed_hard_nos: 0,
+           nos: nos_estimate,
+           redeemed_nos: (nos_estimate * redeeming_yes) as i32,
+           sum_hard_nos: 0, // Optimistic: all soft
+           redeemed_sum_hard_nos: 0,
+           sum_nos: sum_nos_estimate,
+           redeemed_sum_nos: (sum_nos_estimate * redeeming_yes) as i32,
+           word_count: count }
 }
 
 pub fn compare_costs(a: &Cost, b: &Cost, prioritize_soft_no: bool) -> Ordering

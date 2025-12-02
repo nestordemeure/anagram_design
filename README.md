@@ -88,6 +88,8 @@ These exceptions **chain**: you can do Contains P → First P → Double P, as l
 
 ### Cost
 
+**WARNING:** Those cost informatoins are out of date. Trust the code first and foremost.
+
 Each node type contributes to cost metrics:
 - **Hard splits** (primary = secondary): No edge adds 1 to both `nos` and `hard_nos`
 - **Soft splits** (primary ≠ secondary): No edge adds 1 to `nos` only
@@ -142,6 +144,5 @@ To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled 
 ## TODO
 
 * redeeming yes
-  * introcue redeeming_costs, signed integers, scaled by redeeming hits, take priority to their non redeemed equivalent
   * introduce redeeming splits, they have negative redeemed costs
   * gave solver an exhaustive redeeming split adder

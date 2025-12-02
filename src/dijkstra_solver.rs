@@ -3,7 +3,7 @@ use std::rc::Rc;
 use hashbrown::HashMap;
 use smallvec::SmallVec;
 
-use crate::cost::{compare_costs, Cost};
+use crate::cost::{add_no_edge, compare_costs, estimate_cost, Cost};
 use crate::node::{Node, NodeRef, Solution, Position, combine_positional_split};
 use crate::constraints::{Constraints, get_reciprocal, split_allowed, branch_constraints};
 use crate::context::{Context, Mask, mask_count, single_word_from_mask, partitions,
@@ -35,49 +35,6 @@ const fn get_position_masks<'a>(ctx: &'a Context<'a>, position: Position) -> &'a
         Position::Last => &ctx.last_letter_masks,
         Position::Double => &ctx.double_letter_masks,
         Position::Triple => &ctx.triple_letter_masks,
-    }
-}
-
-/// Estimate lower bound cost for a state (used for candidate ordering)
-/// This provides an optimistic (lower) bound that guarantees we won't prune optimal solutions
-fn estimate_cost(mask: Mask, _constraints: &Constraints, _ctx: &Context<'_>, allow_repeat: bool, redeeming_yes: u32) -> Cost {
-    let count = mask_count(mask);
-
-    if count == 1 {
-        return Cost {
-            hard_nos: 0,
-            redeemed_hard_nos: 0,
-            nos: 0,
-            redeemed_nos: 0,
-            sum_hard_nos: 0,
-            redeemed_sum_hard_nos: 0,
-            sum_nos: 0,
-            redeemed_sum_nos: 0,
-            word_count: 1,
-        };
-    }
-
-    // Lower bounds:
-    // - nos: 1 if N >= threshold, else 0
-    //   - When allow_repeat=true: threshold is 3 (2 words can be handled with Repeat, nos=0)
-    //   - When allow_repeat=false: threshold is 2 (need at least one split)
-    // - hard_nos: 0 (optimistic: assume all soft splits)
-    // - sum_nos: N-1 (balanced tree has N-1 internal nodes, each adds ≥1)
-    // - sum_hard_nos: 0 (optimistic: assume all soft)
-    let threshold = if allow_repeat { 3 } else { 2 };
-    let nos_estimate = if count >= threshold { 1 } else { 0 };
-    let sum_nos_estimate = count.saturating_sub(1);
-
-    Cost {
-        hard_nos: 0,                                   // Optimistic: all soft
-        redeemed_hard_nos: 0,
-        nos: nos_estimate,
-        redeemed_nos: (nos_estimate * redeeming_yes) as i32,
-        sum_hard_nos: 0,                               // Optimistic: all soft
-        redeemed_sum_hard_nos: 0,
-        sum_nos: sum_nos_estimate,
-        redeemed_sum_nos: (sum_nos_estimate * redeeming_yes) as i32,
-        word_count: count,
     }
 }
 
@@ -308,8 +265,8 @@ pub(crate) fn solve(
 
         for spec in splits {
             // Estimate the cost of this split
-            let est_yes = estimate_cost(spec.yes, &constraints, ctx, allow_repeat, redeeming_yes);
-            let est_no = estimate_cost(spec.no, &constraints, ctx, allow_repeat, redeeming_yes);
+            let est_yes = estimate_cost(spec.yes, allow_repeat, redeeming_yes);
+            let est_no = estimate_cost(spec.no, allow_repeat, redeeming_yes);
 
             let hard_nos = if spec.is_hard {
                 est_yes.hard_nos.max(est_no.hard_nos + 1)
@@ -481,31 +438,7 @@ pub(crate) fn solve(
 
         // Pruning: check if no branch cost already exceeds best
         if let Some(ref current_best) = best_cost {
-            let no_cost = if spec.is_hard {
-                Cost {
-                    hard_nos: no_sol.cost.hard_nos + 1,
-                    redeemed_hard_nos: no_sol.cost.redeemed_hard_nos + redeeming_yes as i32,
-                    nos: no_sol.cost.nos + 1,
-                    redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
-                    sum_hard_nos: no_sol.cost.sum_hard_nos,
-                    redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
-                    sum_nos: no_sol.cost.sum_nos,
-                    redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
-                    word_count: no_sol.cost.word_count,
-                }
-            } else {
-                Cost {
-                    hard_nos: no_sol.cost.hard_nos,
-                    redeemed_hard_nos: no_sol.cost.redeemed_hard_nos,
-                    nos: no_sol.cost.nos + 1,
-                    redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
-                    sum_hard_nos: no_sol.cost.sum_hard_nos,
-                    redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
-                    sum_nos: no_sol.cost.sum_nos,
-                    redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
-                    word_count: no_sol.cost.word_count,
-                }
-            };
+            let no_cost = add_no_edge(&no_sol.cost, spec.is_hard, redeeming_yes as i32);
 
             // Use compare_costs to check if this no branch is already worse than best
             if compare_costs(&no_cost, current_best, prioritize_soft_no) == Ordering::Greater {
@@ -521,31 +454,7 @@ pub(crate) fn solve(
 
         // Calculate combined cost
         let yes_cost = yes_sol.cost;
-        let no_cost = if spec.is_hard {
-            Cost {
-                hard_nos: no_sol.cost.hard_nos + 1,
-                redeemed_hard_nos: no_sol.cost.redeemed_hard_nos + redeeming_yes as i32,
-                nos: no_sol.cost.nos + 1,
-                redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
-                sum_hard_nos: no_sol.cost.sum_hard_nos,
-                redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
-                sum_nos: no_sol.cost.sum_nos,
-                redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
-                word_count: no_sol.cost.word_count,
-            }
-        } else {
-            Cost {
-                hard_nos: no_sol.cost.hard_nos,
-                redeemed_hard_nos: no_sol.cost.redeemed_hard_nos,
-                nos: no_sol.cost.nos + 1,
-                redeemed_nos: no_sol.cost.redeemed_nos + redeeming_yes as i32,
-                sum_hard_nos: no_sol.cost.sum_hard_nos,
-                redeemed_sum_hard_nos: no_sol.cost.redeemed_sum_hard_nos,
-                sum_nos: no_sol.cost.sum_nos,
-                redeemed_sum_nos: no_sol.cost.redeemed_sum_nos,
-                word_count: no_sol.cost.word_count,
-            }
-        };
+        let no_cost = add_no_edge(&no_sol.cost, spec.is_hard, redeeming_yes as i32);
 
         let hard_nos = yes_cost.hard_nos.max(no_cost.hard_nos);
         let redeemed_hard_nos = yes_cost.redeemed_hard_nos.max(no_cost.redeemed_hard_nos);
