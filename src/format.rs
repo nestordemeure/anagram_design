@@ -130,7 +130,7 @@ pub fn format_tree(node: &Node) -> String {
                     *requirement_letter,
                     requirement_position,
                 ));
-                out.push_str(" [YES-ONLY]\n");
+                out.push_str(" (yes only)\n");
 
                 let child_prefix = format!("{}   ", prefix);
                 // No "no" branch to render for YesSplit
@@ -214,12 +214,10 @@ pub fn format_tree(node: &Node) -> String {
                     *requirement_letter,
                     requirement_position,
                 ));
-                out.push_str(" [YES-ONLY]\n");
+                out.push_str(" (yes only)\n");
 
                 // No "no" branch to render
-
-                out.push_str(prefix);
-                out.push_str("│\n");
+                // No spacer line needed - next node will add its own if needed
 
                 render_yes_final(yes, prefix, out);
             }
@@ -296,13 +294,10 @@ pub fn format_tree(node: &Node) -> String {
                     *requirement_letter,
                     requirement_position,
                 ));
-                out.push_str(" [YES-ONLY]\n");
+                out.push_str(" (yes only)\n");
 
                 // No "no" branch to render
-
-                // Spacer line for clarity between decision points
-                out.push_str(prefix);
-                out.push_str("│\n");
+                // No spacer line needed - next node will add its own if needed
 
                 // Continue down the Yes spine
                 render_spine(yes, prefix, is_final, out);

@@ -152,12 +152,12 @@ function formatNodeInfo(info) {
 
       // YesSplit: like a hard split but with no "no" branch
       if (testLetter === requirementLetter && testPosition === requirementPosition) {
-        return `${formatPosition(testPosition)} '${displayLetter(testLetter)}'? [YES-ONLY]`;
+        return `${formatPosition(testPosition)} '${displayLetter(testLetter)}'? (yes only)`;
       } else {
         // Soft YesSplit
         const testDesc = `${formatPosition(testPosition)} '${displayLetter(testLetter)}'?`;
         const reqDesc = formatRequirement(requirementPosition, requirementLetter);
-        return `${testDesc} (${reqDesc}) [YES-ONLY]`;
+        return `${testDesc} (${reqDesc}) (yes only)`;
       }
     }
     default:
@@ -258,8 +258,8 @@ function renderYesFinal(mergedNode, path, prefix, out) {
     }
 
     // No "no" branch to render
+    // No spacer line needed - next node will add its own if needed
 
-    out.lines.push(`${prefix}│`);
     if (option.yesBranch) {
       renderYesFinal(option.yesBranch, `${path}_yes`, prefix, out);
     }
@@ -322,9 +322,7 @@ function renderSpine(mergedNode, path, prefix, isFinal, out) {
     }
 
     // No "no" branch to render
-
-    // Spacer line
-    out.lines.push(`${prefix}│`);
+    // No spacer line needed - next node will add its own if needed
 
     // Continue down Yes spine
     if (option.yesBranch) {
