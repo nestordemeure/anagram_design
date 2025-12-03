@@ -24,22 +24,13 @@ struct WasmSolution {
 }
 
 fn words_from_js(value: JsValue) -> Result<Vec<String>, JsValue> {
-    from_value(value)
-        .map_err(|e| JsValue::from_str(&format!("Words must be an array of strings: {e}")))
+    from_value(value).map_err(|e| JsValue::from_str(&format!("Words must be an array of strings: {e}")))
 }
 
 fn summary_from_solution(sol: &Solution) -> WasmSolution {
     let word_count = sol.cost.word_count;
-    let avg_hard_nos = if word_count == 0 {
-        0.0
-    } else {
-        sol.cost.sum_hard_nos as f32 / word_count as f32
-    };
-    let avg_nos = if word_count == 0 {
-        0.0
-    } else {
-        sol.cost.sum_nos as f32 / word_count as f32
-    };
+    let avg_hard_nos = if word_count == 0 { 0.0 } else { sol.cost.sum_hard_nos as f32 / word_count as f32 };
+    let avg_nos = if word_count == 0 { 0.0 } else { sol.cost.sum_nos as f32 / word_count as f32 };
 
     // Merge all optimal trees into a single navigable structure
     let merged_tree = MergedNode::merge(&sol.trees);

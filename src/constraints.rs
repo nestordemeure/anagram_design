@@ -12,8 +12,12 @@ pub enum SplitClass {
 pub const fn position_class(pos: Position) -> SplitClass {
     match pos {
         Position::Contains => SplitClass::Contains,
-        Position::First | Position::Second | Position::Third |
-        Position::ThirdToLast | Position::SecondToLast | Position::Last => SplitClass::Positional,
+        Position::First
+        | Position::Second
+        | Position::Third
+        | Position::ThirdToLast
+        | Position::SecondToLast
+        | Position::Last => SplitClass::Positional,
         Position::Double | Position::Triple => SplitClass::DoubleTriple,
     }
 }
@@ -150,248 +154,86 @@ pub struct SoftNoPair {
 /// Children of a soft no cannot use any soft no containing either letter
 pub const SOFT_NO_PAIRS: &[SoftNoPair] = &[
     // E/I pair - vowel similarity
-    SoftNoPair {
-        test_letter: 'e',
-        requirement_letter: 'i',
-    },
-    SoftNoPair {
-        test_letter: 'i',
-        requirement_letter: 'e',
-    },
+    SoftNoPair { test_letter: 'e', requirement_letter: 'i' },
+    SoftNoPair { test_letter: 'i', requirement_letter: 'e' },
     // C/K pair - identical hard sound
-    SoftNoPair {
-        test_letter: 'c',
-        requirement_letter: 'k',
-    },
-    SoftNoPair {
-        test_letter: 'k',
-        requirement_letter: 'c',
-    },
+    SoftNoPair { test_letter: 'c', requirement_letter: 'k' },
+    SoftNoPair { test_letter: 'k', requirement_letter: 'c' },
     // S/Z pair - similar sibilants
-    SoftNoPair {
-        test_letter: 's',
-        requirement_letter: 'z',
-    },
-    SoftNoPair {
-        test_letter: 'z',
-        requirement_letter: 's',
-    },
+    SoftNoPair { test_letter: 's', requirement_letter: 'z' },
+    SoftNoPair { test_letter: 'z', requirement_letter: 's' },
     // I/L pair - visually similar
-    SoftNoPair {
-        test_letter: 'i',
-        requirement_letter: 'l',
-    },
-    SoftNoPair {
-        test_letter: 'l',
-        requirement_letter: 'i',
-    },
+    SoftNoPair { test_letter: 'i', requirement_letter: 'l' },
+    SoftNoPair { test_letter: 'l', requirement_letter: 'i' },
     // M/N pair - nasals
-    SoftNoPair {
-        test_letter: 'm',
-        requirement_letter: 'n',
-    },
-    SoftNoPair {
-        test_letter: 'n',
-        requirement_letter: 'm',
-    },
+    SoftNoPair { test_letter: 'm', requirement_letter: 'n' },
+    SoftNoPair { test_letter: 'n', requirement_letter: 'm' },
     // U/V pair - visually similar
-    SoftNoPair {
-        test_letter: 'u',
-        requirement_letter: 'v',
-    },
-    SoftNoPair {
-        test_letter: 'v',
-        requirement_letter: 'u',
-    },
+    SoftNoPair { test_letter: 'u', requirement_letter: 'v' },
+    SoftNoPair { test_letter: 'v', requirement_letter: 'u' },
     // O/Q pair - visually similar
-    SoftNoPair {
-        test_letter: 'o',
-        requirement_letter: 'q',
-    },
-    SoftNoPair {
-        test_letter: 'q',
-        requirement_letter: 'o',
-    },
+    SoftNoPair { test_letter: 'o', requirement_letter: 'q' },
+    SoftNoPair { test_letter: 'q', requirement_letter: 'o' },
     // C/G pair - visually similar
-    SoftNoPair {
-        test_letter: 'c',
-        requirement_letter: 'g',
-    },
-    SoftNoPair {
-        test_letter: 'g',
-        requirement_letter: 'c',
-    },
+    SoftNoPair { test_letter: 'c', requirement_letter: 'g' },
+    SoftNoPair { test_letter: 'g', requirement_letter: 'c' },
     // B/P pair - voiced/unvoiced
-    SoftNoPair {
-        test_letter: 'b',
-        requirement_letter: 'p',
-    },
-    SoftNoPair {
-        test_letter: 'p',
-        requirement_letter: 'b',
-    },
+    SoftNoPair { test_letter: 'b', requirement_letter: 'p' },
+    SoftNoPair { test_letter: 'p', requirement_letter: 'b' },
     // I/T pair - visually similar
-    SoftNoPair {
-        test_letter: 'i',
-        requirement_letter: 't',
-    },
-    SoftNoPair {
-        test_letter: 't',
-        requirement_letter: 'i',
-    },
+    SoftNoPair { test_letter: 'i', requirement_letter: 't' },
+    SoftNoPair { test_letter: 't', requirement_letter: 'i' },
     // R/E pair
-    SoftNoPair {
-        test_letter: 'r',
-        requirement_letter: 'e',
-    },
-    SoftNoPair {
-        test_letter: 'e',
-        requirement_letter: 'r',
-    },
+    SoftNoPair { test_letter: 'r', requirement_letter: 'e' },
+    SoftNoPair { test_letter: 'e', requirement_letter: 'r' },
     // A/R pair - similar open shapes in block capitals
-    SoftNoPair {
-        test_letter: 'a',
-        requirement_letter: 'r',
-    },
-    SoftNoPair {
-        test_letter: 'r',
-        requirement_letter: 'a',
-    },
+    SoftNoPair { test_letter: 'a', requirement_letter: 'r' },
+    SoftNoPair { test_letter: 'r', requirement_letter: 'a' },
     // I/J pair
-    SoftNoPair {
-        test_letter: 'i',
-        requirement_letter: 'j',
-    },
-    SoftNoPair {
-        test_letter: 'j',
-        requirement_letter: 'i',
-    },
+    SoftNoPair { test_letter: 'i', requirement_letter: 'j' },
+    SoftNoPair { test_letter: 'j', requirement_letter: 'i' },
     // V/W pair
-    SoftNoPair {
-        test_letter: 'v',
-        requirement_letter: 'w',
-    },
-    SoftNoPair {
-        test_letter: 'w',
-        requirement_letter: 'v',
-    },
+    SoftNoPair { test_letter: 'v', requirement_letter: 'w' },
+    SoftNoPair { test_letter: 'w', requirement_letter: 'v' },
     // Q/G pair
-    SoftNoPair {
-        test_letter: 'q',
-        requirement_letter: 'g',
-    },
-    SoftNoPair {
-        test_letter: 'g',
-        requirement_letter: 'q',
-    },
+    SoftNoPair { test_letter: 'q', requirement_letter: 'g' },
+    SoftNoPair { test_letter: 'g', requirement_letter: 'q' },
     // E/B pair
-    SoftNoPair {
-        test_letter: 'e',
-        requirement_letter: 'b',
-    },
-    SoftNoPair {
-        test_letter: 'b',
-        requirement_letter: 'e',
-    },
+    SoftNoPair { test_letter: 'e', requirement_letter: 'b' },
+    SoftNoPair { test_letter: 'b', requirement_letter: 'e' },
     // E/F pair
-    SoftNoPair {
-        test_letter: 'e',
-        requirement_letter: 'f',
-    },
-    SoftNoPair {
-        test_letter: 'f',
-        requirement_letter: 'e',
-    },
+    SoftNoPair { test_letter: 'e', requirement_letter: 'f' },
+    SoftNoPair { test_letter: 'f', requirement_letter: 'e' },
     // R/P pair
-    SoftNoPair {
-        test_letter: 'r',
-        requirement_letter: 'p',
-    },
-    SoftNoPair {
-        test_letter: 'p',
-        requirement_letter: 'r',
-    },
+    SoftNoPair { test_letter: 'r', requirement_letter: 'p' },
+    SoftNoPair { test_letter: 'p', requirement_letter: 'r' },
     // R/B pair
-    SoftNoPair {
-        test_letter: 'r',
-        requirement_letter: 'b',
-    },
-    SoftNoPair {
-        test_letter: 'b',
-        requirement_letter: 'r',
-    },
+    SoftNoPair { test_letter: 'r', requirement_letter: 'b' },
+    SoftNoPair { test_letter: 'b', requirement_letter: 'r' },
     // T/F pair
-    SoftNoPair {
-        test_letter: 't',
-        requirement_letter: 'f',
-    },
-    SoftNoPair {
-        test_letter: 'f',
-        requirement_letter: 't',
-    },
+    SoftNoPair { test_letter: 't', requirement_letter: 'f' },
+    SoftNoPair { test_letter: 'f', requirement_letter: 't' },
     // Y/X pair
-    SoftNoPair {
-        test_letter: 'y',
-        requirement_letter: 'x',
-    },
-    SoftNoPair {
-        test_letter: 'x',
-        requirement_letter: 'y',
-    },
+    SoftNoPair { test_letter: 'y', requirement_letter: 'x' },
+    SoftNoPair { test_letter: 'x', requirement_letter: 'y' },
     // Y/V pair
-    SoftNoPair {
-        test_letter: 'y',
-        requirement_letter: 'v',
-    },
-    SoftNoPair {
-        test_letter: 'v',
-        requirement_letter: 'y',
-    },
+    SoftNoPair { test_letter: 'y', requirement_letter: 'v' },
+    SoftNoPair { test_letter: 'v', requirement_letter: 'y' },
     // O/G pair
-    SoftNoPair {
-        test_letter: 'o',
-        requirement_letter: 'g',
-    },
-    SoftNoPair {
-        test_letter: 'g',
-        requirement_letter: 'o',
-    },
+    SoftNoPair { test_letter: 'o', requirement_letter: 'g' },
+    SoftNoPair { test_letter: 'g', requirement_letter: 'o' },
     // P/F pair
-    SoftNoPair {
-        test_letter: 'p',
-        requirement_letter: 'f',
-    },
-    SoftNoPair {
-        test_letter: 'f',
-        requirement_letter: 'p',
-    },
+    SoftNoPair { test_letter: 'p', requirement_letter: 'f' },
+    SoftNoPair { test_letter: 'f', requirement_letter: 'p' },
     // A/H pair
-    SoftNoPair {
-        test_letter: 'a',
-        requirement_letter: 'h',
-    },
-    SoftNoPair {
-        test_letter: 'h',
-        requirement_letter: 'a',
-    },
+    SoftNoPair { test_letter: 'a', requirement_letter: 'h' },
+    SoftNoPair { test_letter: 'h', requirement_letter: 'a' },
     // D/B pair
-    SoftNoPair {
-        test_letter: 'd',
-        requirement_letter: 'b',
-    },
-    SoftNoPair {
-        test_letter: 'b',
-        requirement_letter: 'd',
-    },
+    SoftNoPair { test_letter: 'd', requirement_letter: 'b' },
+    SoftNoPair { test_letter: 'b', requirement_letter: 'd' },
     // J/L pair
-    SoftNoPair {
-        test_letter: 'j',
-        requirement_letter: 'l',
-    },
-    SoftNoPair {
-        test_letter: 'l',
-        requirement_letter: 'j',
-    },
+    SoftNoPair { test_letter: 'j', requirement_letter: 'l' },
+    SoftNoPair { test_letter: 'l', requirement_letter: 'j' },
 ];
 
 pub fn split_allowed(
@@ -444,23 +286,43 @@ pub fn would_form_soft_split(
     if primary_idx == secondary_idx {
         let valid_pairs: Vec<(Position, Position)> = match primary_pos {
             Position::First => vec![(Position::First, Position::Second), (Position::First, Position::Last)],
-            Position::Second => vec![(Position::Second, Position::First), (Position::Second, Position::Third), (Position::Second, Position::SecondToLast)],
-            Position::Third => vec![(Position::Third, Position::Second), (Position::Third, Position::ThirdToLast)],
-            Position::ThirdToLast => vec![(Position::ThirdToLast, Position::Third), (Position::ThirdToLast, Position::SecondToLast)],
-            Position::SecondToLast => vec![(Position::SecondToLast, Position::Second), (Position::SecondToLast, Position::ThirdToLast), (Position::SecondToLast, Position::Last)],
-            Position::Last => vec![(Position::Last, Position::First), (Position::Last, Position::SecondToLast)],
+            Position::Second => vec![
+                (Position::Second, Position::First),
+                (Position::Second, Position::Third),
+                (Position::Second, Position::SecondToLast),
+            ],
+            Position::Third => {
+                vec![(Position::Third, Position::Second), (Position::Third, Position::ThirdToLast)]
+            }
+            Position::ThirdToLast => vec![
+                (Position::ThirdToLast, Position::Third),
+                (Position::ThirdToLast, Position::SecondToLast),
+            ],
+            Position::SecondToLast => vec![
+                (Position::SecondToLast, Position::Second),
+                (Position::SecondToLast, Position::ThirdToLast),
+                (Position::SecondToLast, Position::Last),
+            ],
+            Position::Last => {
+                vec![(Position::Last, Position::First), (Position::Last, Position::SecondToLast)]
+            }
             _ => vec![],
         };
 
         for (pos1, pos2) in valid_pairs {
-            if (primary_pos == pos1 && secondary_pos == pos2) || (primary_pos == pos2 && secondary_pos == pos1) {
+            if (primary_pos == pos1 && secondary_pos == pos2)
+                || (primary_pos == pos2 && secondary_pos == pos1)
+            {
                 return true;
             }
         }
     }
 
     // 3. Check if they're different letters at Double or Triple position
-    if matches!(primary_pos, Position::Double | Position::Triple) && primary_pos == secondary_pos && primary_idx != secondary_idx {
+    if matches!(primary_pos, Position::Double | Position::Triple)
+        && primary_pos == secondary_pos
+        && primary_idx != secondary_idx
+    {
         return true;
     }
 

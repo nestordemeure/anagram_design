@@ -114,13 +114,7 @@ pub fn format_tree(node: &Node) -> String {
                 render_no_branch(no, &format!("{child_prefix}│"), out);
                 render_yes_final(yes, &child_prefix, out);
             }
-            Node::YesSplit {
-                test_letter,
-                test_position,
-                requirement_letter,
-                requirement_position,
-                yes,
-            } => {
+            Node::YesSplit { test_letter, test_position, requirement_letter, requirement_position, yes } => {
                 // YesSplit in a No branch position
                 out.push_str(prefix);
                 out.push_str("└─ No: ");
@@ -195,13 +189,7 @@ pub fn format_tree(node: &Node) -> String {
 
                 render_yes_final(yes, prefix, out);
             }
-            Node::YesSplit {
-                test_letter,
-                test_position,
-                requirement_letter,
-                requirement_position,
-                yes,
-            } => {
+            Node::YesSplit { test_letter, test_position, requirement_letter, requirement_position, yes } => {
                 // YesSplit: like a hard split but with no "no" branch
                 out.push_str(prefix);
                 out.push_str("│\n");
@@ -278,13 +266,7 @@ pub fn format_tree(node: &Node) -> String {
                 // Continue down the Yes spine
                 render_spine(yes, prefix, is_final, out);
             }
-            Node::YesSplit {
-                test_letter,
-                test_position,
-                requirement_letter,
-                requirement_position,
-                yes,
-            } => {
+            Node::YesSplit { test_letter, test_position, requirement_letter, requirement_position, yes } => {
                 // YesSplit: like a hard split but with no "no" branch
                 out.push_str(prefix);
                 out.push_str(&format_position_question(

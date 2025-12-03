@@ -6,8 +6,12 @@ use crate::node::{Node, NodeRef, Position};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum NodeInfo {
-    Leaf { word: String },
-    Repeat { word: String },
+    Leaf {
+        word: String,
+    },
+    Repeat {
+        word: String,
+    },
     PositionalSplit {
         test_letter: char,
         test_position: Position,
@@ -41,11 +45,7 @@ impl NodeInfo {
                 requirement_position: *requirement_position,
             },
             Node::YesSplit {
-                test_letter,
-                test_position,
-                requirement_letter,
-                requirement_position,
-                ..
+                test_letter, test_position, requirement_letter, requirement_position, ..
             } => NodeInfo::YesSplit {
                 test_letter: *test_letter,
                 test_position: *test_position,
@@ -129,11 +129,7 @@ impl MergedNode {
                     Some(Box::new(MergedNode::merge(&no_branches)))
                 };
 
-                MergedOption {
-                    info,
-                    yes_branch,
-                    no_branch,
-                }
+                MergedOption { info, yes_branch, no_branch }
             })
             .collect();
 
@@ -151,7 +147,6 @@ impl MergedNode {
 
     /// Check if this is a leaf node (no children)
     pub fn is_leaf(&self) -> bool {
-        self.options.len() == 1
-            && matches!(self.options[0].info, NodeInfo::Leaf { .. })
+        self.options.len() == 1 && matches!(self.options[0].info, NodeInfo::Leaf { .. })
     }
 }

@@ -93,13 +93,12 @@ impl<'a> Iterator for Partitions<'a> {
     }
 }
 
-pub const fn partitions<'a>(mask: Mask, masks: &'a [Mask; 26], global_letters: &'a [usize]) -> Partitions<'a> {
-    Partitions {
-        masks,
-        mask,
-        global_letters,
-        idx: 0,
-    }
+pub const fn partitions<'a>(
+    mask: Mask,
+    masks: &'a [Mask; 26],
+    global_letters: &'a [usize],
+) -> Partitions<'a> {
+    Partitions { masks, mask, global_letters, idx: 0 }
 }
 
 pub fn letters_present(mask: Mask, ctx: &Context<'_>) -> u32 {
