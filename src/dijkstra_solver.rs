@@ -525,14 +525,12 @@ pub(crate) fn solve(mask: Mask,
             let no_word_count = mask_count(spec.no);
             let min_words_for_yes_split = if allow_repeat { 3 } else { 2 };
 
-            let max_yes_splits = if redeeming_yes > 0 && no_word_count >= min_words_for_yes_split {
-                redeeming_yes
-            } else {
-                0
-            };
+            let max_yes_splits =
+                if redeeming_yes > 0 && no_word_count >= min_words_for_yes_split { redeeming_yes } else { 0 };
 
             // Apply maximum possible YesSplits (reduces redeemed costs)
-            for _ in 0..max_yes_splits {
+            for _ in 0..max_yes_splits
+            {
                 no_cost = add_yes_split(&no_cost);
             }
 
@@ -673,14 +671,8 @@ pub(crate) fn solve(mask: Mask,
                                         (spec.req_position, spec.req_idx)]);
 
             // If parent is a hard split, pass info to avoid redundant yes splits
-            let parent_hard_split = if spec.is_hard {
-                Some((spec.test_idx, spec.test_position))
-            } else {
-                None
-            };
-
-            // Track YesSplits that produced bad/unsolvable results
-            let mut failed_yes_splits: SmallVec<[(Position, usize); 8]> = SmallVec::new();
+            let parent_hard_split =
+                if spec.is_hard { Some((spec.test_idx, spec.test_position)) } else { None };
 
             // Current layer: (solution, constraints, yessplit_chain)
             type LayerEntry = (Solution, Constraints, SmallVec<[(Position, usize, char); 8]>);
@@ -694,15 +686,16 @@ pub(crate) fn solve(mask: Mask,
                 for (_prev_sol, prev_constraints, prev_chain) in &current_layer
                 {
                     // Find valid YesSplits at this layer (only immediate children for first layer)
-                    let parent_hard_split_filter = if prev_chain.is_empty() { parent_hard_split } else { None };
-                    let valid_splits = find_valid_yes_splits(spec.no, ctx, prev_constraints, parent_hard_split_filter);
+                    let parent_hard_split_filter =
+                        if prev_chain.is_empty() { parent_hard_split } else { None };
+                    let valid_splits =
+                        find_valid_yes_splits(spec.no, ctx, prev_constraints, parent_hard_split_filter);
 
                     for (position, idx, letter) in valid_splits
                     {
                         // Skip if already used in parent split, previous chain, or marked as failed
                         let already_used = parent_exclusions.iter().any(|(p, i)| *p == position && *i == idx)
-                                          || prev_chain.iter().any(|(p, i, _)| *p == position && *i == idx)
-                                          || failed_yes_splits.iter().any(|(p, i)| *p == position && *i == idx);
+                                           || prev_chain.iter().any(|(p, i, _)| *p == position && *i == idx);
 
                         if already_used
                         {
@@ -721,16 +714,17 @@ pub(crate) fn solve(mask: Mask,
                         );
 
                         // RE-SOLVE with updated constraints
-                        let new_sol = solve(spec.no, ctx, allow_repeat, prioritize_soft_no, redeeming_yes, new_constraints, memo);
+                        let new_sol = solve(spec.no,
+                                            ctx,
+                                            allow_repeat,
+                                            prioritize_soft_no,
+                                            redeeming_yes,
+                                            new_constraints,
+                                            memo);
 
                         // Check if this YesSplit produced a bad/unsolvable result
                         if new_sol.is_unsolvable()
                         {
-                            // Mark this YesSplit as failed - don't try it in future layers
-                            if !failed_yes_splits.iter().any(|(p, i)| *p == position && *i == idx)
-                            {
-                                failed_yes_splits.push((position, idx));
-                            }
                             continue;
                         }
 
@@ -754,7 +748,8 @@ pub(crate) fn solve(mask: Mask,
                         if spec.is_hard
                         {
                             no_cost.sum_hard_nos += new_sol.cost.word_count;
-                            no_cost.redeemed_sum_hard_nos += new_sol.cost.word_count as i32 * redeeming_yes as i32;
+                            no_cost.redeemed_sum_hard_nos +=
+                                new_sol.cost.word_count as i32 * redeeming_yes as i32;
                         }
 
                         // Cap redeemed costs to not be negative
@@ -782,7 +777,8 @@ pub(crate) fn solve(mask: Mask,
                                                  redeemed_sum_hard_nos: total_redeemed_sum_hard_nos,
                                                  sum_nos: total_sum_nos,
                                                  redeemed_sum_nos: total_redeemed_sum_nos,
-                                                 word_count: yes_sol.cost.word_count + new_sol.cost.word_count };
+                                                 word_count: yes_sol.cost.word_count
+                                                             + new_sol.cost.word_count };
 
                         // Check if this solution is competitive with current best
                         let should_skip = if let Some(ref current_best) = best_cost
@@ -796,11 +792,6 @@ pub(crate) fn solve(mask: Mask,
 
                         if should_skip
                         {
-                            // Mark this YesSplit as failed - don't try it in future layers
-                            if !failed_yes_splits.iter().any(|(p, i)| *p == position && *i == idx)
-                            {
-                                failed_yes_splits.push((position, idx));
-                            }
                             continue;
                         }
 
@@ -814,7 +805,11 @@ pub(crate) fn solve(mask: Mask,
                             let mut wrapped_tree = Rc::clone(tree);
                             for (ys_pos, _, ys_letter) in &new_chain
                             {
-                                wrapped_tree = combine_yes_split(*ys_letter, *ys_pos, *ys_letter, *ys_pos, &wrapped_tree);
+                                wrapped_tree = combine_yes_split(*ys_letter,
+                                                                 *ys_pos,
+                                                                 *ys_letter,
+                                                                 *ys_pos,
+                                                                 &wrapped_tree);
                             }
 
                             // Combine with yes branch to form complete tree
@@ -833,36 +828,39 @@ pub(crate) fn solve(mask: Mask,
                                                                                  &wrapped_tree));
                                     }
                                 }
-                                Some(ref current) => match compare_costs(&branch_cost, current, prioritize_soft_no)
+                                Some(ref current) =>
                                 {
-                                    Ordering::Less =>
+                                    match compare_costs(&branch_cost, current, prioritize_soft_no)
                                     {
-                                        best_trees.clear();
-                                        best_cost = Some(branch_cost);
-                                        for y in &yes_sol.trees
+                                        Ordering::Less =>
                                         {
-                                            best_trees.push(combine_positional_split(spec.test_letter,
-                                                                                     spec.test_position,
-                                                                                     spec.req_letter,
-                                                                                     spec.req_position,
-                                                                                     y,
-                                                                                     &wrapped_tree));
+                                            best_trees.clear();
+                                            best_cost = Some(branch_cost);
+                                            for y in &yes_sol.trees
+                                            {
+                                                best_trees.push(combine_positional_split(spec.test_letter,
+                                                                                         spec.test_position,
+                                                                                         spec.req_letter,
+                                                                                         spec.req_position,
+                                                                                         y,
+                                                                                         &wrapped_tree));
+                                            }
                                         }
-                                    }
-                                    Ordering::Equal =>
-                                    {
-                                        for y in &yes_sol.trees
+                                        Ordering::Equal =>
                                         {
-                                            best_trees.push(combine_positional_split(spec.test_letter,
-                                                                                     spec.test_position,
-                                                                                     spec.req_letter,
-                                                                                     spec.req_position,
-                                                                                     y,
-                                                                                     &wrapped_tree));
+                                            for y in &yes_sol.trees
+                                            {
+                                                best_trees.push(combine_positional_split(spec.test_letter,
+                                                                                         spec.test_position,
+                                                                                         spec.req_letter,
+                                                                                         spec.req_position,
+                                                                                         y,
+                                                                                         &wrapped_tree));
+                                            }
                                         }
+                                        Ordering::Greater =>
+                                        {}
                                     }
-                                    Ordering::Greater =>
-                                    {}
                                 }
                             }
                         }
