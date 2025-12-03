@@ -1,13 +1,16 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Anagram Generator</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔀</text></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔀</text></svg>">
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <main class="container">
     <header>
@@ -21,23 +24,27 @@
       <form id="solver-form">
         <label for="words">
           Word list (one per line or comma separated)
-          <textarea id="words" name="words" rows="3" placeholder="Aries&#10;Taurus&#10;Gemini&#10;Cancer&#10;Leo&#10;Virgo&#10;Libra&#10;Scorpio&#10;Sagittarius&#10;Capricorn&#10;Aquarius&#10;Pisces"></textarea>
+          <textarea id="words" name="words" rows="3"
+            placeholder="Aries&#10;Taurus&#10;Gemini&#10;Cancer&#10;Leo&#10;Virgo&#10;Libra&#10;Scorpio&#10;Sagittarius&#10;Capricorn&#10;Aquarius&#10;Pisces"></textarea>
         </label>
 
         <div class="grid">
-          <label title="Derren Brown's "Please repeat your sign in your mind, like Aries, Aries, Aries…" ploy.">
-            <input type="checkbox" id="allow-repeat" name="allow-repeat" title="Derren Brown's "Please repeat your sign in your mind, like Aries, Aries, Aries…" ploy.">
+          <label title="Derren Brown's " Please repeat your sign in your mind, like Aries, Aries, Aries…" ploy.">
+            <input type="checkbox" id="allow-repeat" name="allow-repeat" title="Derren Brown's " Please repeat your sign
+              in your mind, like Aries, Aries, Aries…" ploy.">
             Use the "repeat in your mind" ploy
           </label>
           <label title="This might lead to more No answers, but they will be easier to justify verbally.">
-            <input type="checkbox" id="prioritize-soft" name="prioritize-soft" title="This might lead to more No answers, but they will be easier to justify verbally.">
+            <input type="checkbox" id="prioritize-soft" name="prioritize-soft"
+              title="This might lead to more No answers, but they will be easier to justify verbally.">
             Prioritize explainable "no" over minimizing total "no"
           </label>
         </div>
 
         <label for="redeeming-yes" style="display: flex; align-items: center; gap: 1rem;">
-          <span>Maximum guaranteed "yes" inserted (0 means none)</span>
-          <input type="number" id="redeeming-yes" name="redeeming-yes" value="2" min="0" max="10" step="1" style="width: auto; margin: 0;">
+          <span>Maximum consecutive guaranteed "yes" (0 means none)</span>
+          <input type="number" id="redeeming-yes" name="redeeming-yes" value="2" min="0" max="10" step="1"
+            style="width: auto; margin: 0;">
         </label>
 
         <button type="submit">Generate</button>
@@ -53,4 +60,5 @@
 
   <script type="module" src="./main.js"></script>
 </body>
+
 </html>
