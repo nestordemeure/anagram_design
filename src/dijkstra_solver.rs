@@ -800,8 +800,9 @@ pub(crate) fn solve(mask: Mask,
                         for tree in &new_sol.trees
                         {
                             // Build the YesSplit chain wrapping this tree
+                            // Reverse the chain so the most recent layer (last in chain) is innermost
                             let mut wrapped_tree = Rc::clone(tree);
-                            for (ys_pos, _, ys_letter) in &new_chain
+                            for (ys_pos, _, ys_letter) in new_chain.iter().rev()
                             {
                                 wrapped_tree = combine_yes_split(*ys_letter,
                                                                  *ys_pos,

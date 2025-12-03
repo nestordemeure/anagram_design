@@ -153,7 +153,3 @@ python3 -m http.server 8000 --directory docs
 Use `wasm-bindgen-cli 0.2.95` to match the pinned crate version (or update both in lockstep).
 
 To publish on GitHub Pages, point Pages at the `docs/` directory so the bundled `pkg/` assets are served alongside `index.html`.
-
-## TODO
-
-* fix bug_report.md
